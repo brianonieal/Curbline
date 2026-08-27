@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curbline &middot; street flooding, New York City</title>
+<meta name="description"
+      content="Live street-flooding zones across New York City, from sensor depth
+               readings correlated against National Weather Service warnings.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+<main class="console">
+
+  <header class="head">
+    <h1 class="wordmark">Curb<span>line</span></h1>
+    <p class="tagline">Street flooding &middot; New York City</p>
+
+    <div class="head-stats">
+      <div class="stat">
+        <span class="stat-value mono" id="stat-zones">&mdash;</span>
+        <span class="label">Open zones</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value mono" id="stat-deepest">&mdash;</span>
+        <span class="label">Deepest now</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value mono" id="stat-wet">&mdash;</span>
+        <span class="label">Sensors wet</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- The staff gauge. A graduated depth scale is the instrument this whole
+       domain is read through, so it is the console's primary axis rather than
+       a chart tucked into a corner. Each tick is one wet sensor at its true
+       depth; the water fills to the deepest current reading. -->
+  <aside class="rail" aria-label="Network depth gauge">
+    <div class="rail-head">
+      <span class="label">Depth gauge</span>
+    </div>
+    <div class="rail-water" id="rail-water"></div>
+    <div class="rail-scale" id="rail-scale"></div>
+    <div class="rail-foot">
+      <span class="label" id="rail-count">No wet sensors</span>
+    </div>
+  </aside>
+
+  <section class="map">
+    <div id="map"></div>
+    <div class="legend">
+      <span class="label">Legend</span>
+      <div class="legend-row"><i class="swatch zone"></i>  Flooding zone</div>
+      <div class="legend-row"><i class="swatch alert"></i> NWS flood warning</div>
+      <div class="legend-row"><i class="swatch wet"></i>   Sensor reporting water</div>
+      <div class="legend-row"><i class="swatch dry"></i>   Sensor reporting dry</div>
+    </div>
+  </section>
+
+  <section class="queue" aria-label="Advisory queue">
+    <div class="queue-head">
+      <span class="label">Advisory queue</span>
+      <span class="label mono" id="queue-count"></span>
+    </div>
+    <div class="queue-list" id="queue-list">
+      <div class="empty">
+        <p class="empty-lead">Waiting for the first pipeline tick.</p>
+        <p class="empty-sub">
+          If this persists, check that the collector and correlator are running.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Component status. This is here because the distributed system is the
+       point: queue depth is the visible proof the stages are decoupled. -->
+  <footer class="foot">
+    <span><i class="pip" id="pip-link"></i><span id="txt-link">Connecting</span></span>
+    <i class="foot-sep"></i>
+    <span>Ingest queue <b class="mono" id="q-ingest">&mdash;</b></span>
+    <span>Zones queue <b class="mono" id="q-zones">&mdash;</b></span>
+    <i class="foot-sep"></i>
+    <span><i class="pip" id="pip-db"></i>PostGIS</span>
+    <span><i class="pip" id="pip-cache"></i>Cache <b class="mono" id="c-rate">&mdash;</b></span>
+    <i class="foot-sep"></i>
+    <span>Source <b class="mono" id="s-source">&mdash;</b></span>
+    <span>Readings <b class="mono" id="s-readings">&mdash;</b></span>
+    <span>Advisories <b class="mono" id="s-advisories">&mdash;</b></span>
+    <i class="foot-sep"></i>
+    <span>Updated <b class="mono" id="s-tick">&mdash;</b></span>
+  </footer>
+
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

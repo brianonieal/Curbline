@@ -1,0 +1,19 @@
+[Unit]
+Description=Curbline correlator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/curbline
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/curbline/.venv/bin/python -m workers.correlator
+Restart=always
+RestartSec=5
+# Give the worker time to finish the message it is holding before SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

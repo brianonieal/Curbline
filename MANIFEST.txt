@@ -1,0 +1,79 @@
+CURBLINE  v0.4.1  (consolidated)
+Packaged: 2026-08-27 20:32 UTC
+
+SINGLE AUTHORITATIVE ARCHIVE. Delete every earlier Curbline zip and folder.
+
+Merged from four archives. All 77 files across them were hashed against this
+tree. Nothing was unique to the discarded ones; each file was either
+byte-identical or an older revision. See CONSOLIDATION.md.
+
+Discarded because they reintroduce fixed bugs if copied by hand:
+  sources.py     raw gage height as depth -> 10/12 gauges permanent WARNING
+  provision.py   no port 8000, no security-group self-attach
+  config.py      no source-specific threshold guidance
+  bootstrap.sh   missing redis-tools, awscli, jq
+  db.py          predates the presentation read models; api/server.py fails
+  .env.example, README.md   earlier revisions
+
+Validated after merge:
+  26/26 tests pass (moto, no AWS account touched)
+  all Python compiles; app.js passes node --check; shell scripts parse
+  gage-height baseline fix present in curbline/sources.py
+  security-group self-attach present in infra/provision.py
+
+NOT validated: nothing here has run against a real AWS account.
+
+Read order:  CLAUDE.md  ->  VERSION_ROADMAP.md  ->  infra/SETUP.md
+
+------------------------------------------------------------------------
+SHA-256                                                              BYTES  PATH
+------------------------------------------------------------------------
+eb0898a0c3decda28a400534b22c13ec937e44cad68b81198d5b03a6bafe3408      1431  .env.example
+53bc971e2f38ade770ac233817849881c7a550278037e171484b59d0edc7ee35       314  .gitignore
+83f8dbf8148073c96121caddfd00ee149b08f9f3c42f4d591704b83caed8cfc9      3023  CHANGELOG.md
+37ce0c28676d101de380a44e06e906bf852b330be09ec957bf61f668e9e77cfe      6809  CLAUDE.md
+fa45c97732c4d179e2ead8428943d2528de471ad4a1e4c933a6727ef48de516a      2456  CONSOLIDATION.md
+d9275a0f22ec2ac6e1491a904e413a9f2b2d99ea2f1aa6aa80e35cd35ef47fa7      3965  COSTS.md
+1d9303a58a8160d362badff2c44a62e35991f8ea6b8f91311f82a874a2d3d4df      8421  DECISIONS.md
+528598447fa5b7fbb6bd7027ac1f70ed4c1c0da8c340025a5026155bb3d1d780      6020  DEMO.md
+48e0bcf493bd92c37668f119d3d5c7ae6bcff6c62aec6d7e474b8c04761112ef      5752  ERRORS.md
+04ae0d5a68f8465a6f3644e94664f23048842223ec1f9dd28511ec7d50d73ff3     11562  README.md
+c725da25e5aaf6685c6cdd54e2e39be2cd4ea7987bd1ac1a9baf07ec2be12292      7418  RETENTION.md
+5d6d008ba68baecd820d4ca45c5de5ffa0a82ea29413312e84fcfabc1afab03c      2617  TESTS.md
+e6563b387da24e1c6b318f6fbdd55b04f2fe049461e049df44f43b8383a0dbcd      1093  TIMELOG.md
+766e2c9f07c81cd3cb11a7da970c3fdb4260c2c46faab74463c467f9d95e2afd     11981  VERSION_ROADMAP.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855         0  api/__init__.py
+081ac0175b423066be45af77bbd4aee398789211d4331775e0d0c6100d1059b6      9590  api/mock_server.py
+0075cccf256ead1494db3af0d5310b29c8e49d313cfaa80a168912c17bc8135c      7328  api/server.py
+1a507fa5b63a10e94bc9ecf11ac98af5d469714e5f223376b70ec67ef08885e7       102  curbline/__init__.py
+70113e29debca8fe6c9f1f435516352d1c59ad2aa2a3493cd8e794d872c2a01c      4553  curbline/aws.py
+d4bf4755658a20a4690fb683f60d05fa59b4c664a30d5b98605d553aa527c4e6      3046  curbline/cache.py
+580eadcc923cd784cedfded7f0070a568b4f921261697ecd7560ebc9f4d8b8f3      3430  curbline/config.py
+c511c19ae2ad9bd75d60052c28310060637d85078d35760d103f13270792114a     12639  curbline/db.py
+8c79ab8f605477622e30b59c9e7f09feff34cd57bfdc65c309a979fbef8fcdb3      9693  curbline/sources.py
+22428912416fdc02e7827680178effc2e6e6a89c03bcb7696540e88ab88e3288      1848  data/capture_replay.py
+2dd7904dcaf7caf3f3a399dfbec426dea0182cfd3939f5c09894a782bd826aaf      2068  data/replay.example.json
+b6e6bf60b30d5866e035f5f36fd44025447c4107964caadbe3f562e81193d246      5357  docs/REPORT.md
+c68be61705f149f76f77ee6e22c747d86980caa702f5e18678a7b358ab20d760      2643  infra/SETUP.md
+9b5a9456d4baeda81ddf2757f16e6a561d8b40732c6ea6450d5ea9db3d39921e      1008  infra/bootstrap.sh
+9e8d671b35a3bbf57d12ebdd02153219dbbaaf5c8140e6ea7a14e56e43999fc5      2254  infra/iam-policy.json
+e3277b69ce17768486297d7628b7b1196f8338cb19054c07414486c67b4d3ada     17219  infra/provision.py
+457878aa8ad9f9797224cbf86994cd831409a4947513e8e3222f1c8a6ccd0c7e      5962  infra/teardown.py
+79d538ad248e7d76c5409263ee35705e63e6e1a99caed2bdde01373390e7f911       137  requirements.txt
+64aafcab498dc118f75278ca31fac0e9eb3cc10ab440a96e869c04e4568e3f27      6467  scripts/gate-check.sh
+8e94ed4ce11df2030dc25cf6cc89c8657d481234dc4b1e8b0fbf63fabe4e18f7      7992  sql/schema.sql
+0e48b26c31ebc5b03d2cd6bea879002aac689691ed899b58fea7149524de371b       365  systemd/curbline-api.service
+4e4a852238eff2bb94a9f80efbf53dd928221e86428e6563f5e45534dcac05bc       447  systemd/curbline-collector.service
+ee797e738bb56ef0a0eb9b5e919919d7227d34327091b6823ecf0224dc1702ed       449  systemd/curbline-correlator.service
+b8beb84cfd8cbbd8b64ff7e3d7aeef72632f076546ec1e12464409204915a574       449  systemd/curbline-dispatcher.service
+f0c33c138205575e3d599c0e1c0cbd6f6858681c4d8846b721d7b121f9d94aff      2548  tests/fixture_clusters.sql
+dba6434b31cf599aa703da537b35cd6352b129b45d2b508f6b1d4c0b3f60306f     13326  tests/test_pipeline.py
+0dce21d5e5ebd2bb7fb122d172c7cccdc2728ee61f7f9e8410f69e4a99e630f4     14810  web/app.js
+4674e3b543080450b328c82dc9d6eadebb0b1cfd18b205c15c480ba7172c393c      4226  web/index.html
+37c5c73003e3fe87bd05711693a94cd76d4b820dec9bc0686e6534f2497d745e     12539  web/style.css
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855         0  workers/__init__.py
+c85465a17adc10fbeeb06a28881d52145ed822ad9fb19cdfdc5b98c119b53ec1      3636  workers/collector.py
+ca6bc82fe740c659608d57992aed23f3752697c9fd6863b1f4a69a3a108e67a3      4706  workers/correlator.py
+87c9e0fee43a0f49e4b9f5b713021aacff256d203ecbaec2cca30cee9527cab2      5741  workers/dispatcher.py
+------------------------------------------------------------------------
+47 files, 239,440 bytes

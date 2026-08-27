@@ -1,0 +1,14 @@
+# Contains the RDS master password. Never commit.
+.env
+infra/stack.json
+
+# FloodNet data is under a noncommercial license. Do not redistribute it via a
+# public repo: cache it locally, ingest it, never commit it.
+data/*.json
+!data/replay.example.json
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+screenshots/raw/

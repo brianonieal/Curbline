@@ -1,0 +1,30 @@
+[
+  [
+    {"sensor_id":"demo:q1","name":"Jamaica Ave & 150th","lon":-73.7975,"lat":40.7020,"depth_cm":2.1},
+    {"sensor_id":"demo:q2","name":"Jamaica Ave & 153rd","lon":-73.7940,"lat":40.7025,"depth_cm":1.4},
+    {"sensor_id":"demo:q3","name":"Hillside Ave & 150th","lon":-73.7968,"lat":40.7062,"depth_cm":3.0},
+    {"sensor_id":"demo:q4","name":"90th Ave & 150th","lon":-73.7981,"lat":40.6995,"depth_cm":0.8},
+    {"sensor_id":"demo:b1","name":"Van Brunt & Beard","lon":-74.0165,"lat":40.6748,"depth_cm":1.1}
+  ],
+  [
+    {"sensor_id":"demo:q1","name":"Jamaica Ave & 150th","lon":-73.7975,"lat":40.7020,"depth_cm":6.4},
+    {"sensor_id":"demo:q2","name":"Jamaica Ave & 153rd","lon":-73.7940,"lat":40.7025,"depth_cm":5.2},
+    {"sensor_id":"demo:q3","name":"Hillside Ave & 150th","lon":-73.7968,"lat":40.7062,"depth_cm":8.9},
+    {"sensor_id":"demo:q4","name":"90th Ave & 150th","lon":-73.7981,"lat":40.6995,"depth_cm":3.3},
+    {"sensor_id":"demo:b1","name":"Van Brunt & Beard","lon":-74.0165,"lat":40.6748,"depth_cm":2.0}
+  ],
+  [
+    {"sensor_id":"demo:q1","name":"Jamaica Ave & 150th","lon":-73.7975,"lat":40.7020,"depth_cm":14.5},
+    {"sensor_id":"demo:q2","name":"Jamaica Ave & 153rd","lon":-73.7940,"lat":40.7025,"depth_cm":11.8},
+    {"sensor_id":"demo:q3","name":"Hillside Ave & 150th","lon":-73.7968,"lat":40.7062,"depth_cm":22.1},
+    {"sensor_id":"demo:q4","name":"90th Ave & 150th","lon":-73.7981,"lat":40.6995,"depth_cm":9.2},
+    {"sensor_id":"demo:b1","name":"Van Brunt & Beard","lon":-74.0165,"lat":40.6748,"depth_cm":11.0}
+  ],
+  [
+    {"sensor_id":"demo:q1","name":"Jamaica Ave & 150th","lon":-73.7975,"lat":40.7020,"depth_cm":26.0},
+    {"sensor_id":"demo:q2","name":"Jamaica Ave & 153rd","lon":-73.7940,"lat":40.7025,"depth_cm":19.4},
+    {"sensor_id":"demo:q3","name":"Hillside Ave & 150th","lon":-73.7968,"lat":40.7062,"depth_cm":34.7},
+    {"sensor_id":"demo:q4","name":"90th Ave & 150th","lon":-73.7981,"lat":40.6995,"depth_cm":15.6},
+    {"sensor_id":"demo:b1","name":"Van Brunt & Beard","lon":-74.0165,"lat":40.6748,"depth_cm":13.4}
+  ]
+]

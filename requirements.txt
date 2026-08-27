@@ -1,0 +1,8 @@
+boto3>=1.34
+psycopg[binary,pool]>=3.1
+redis>=5.0
+requests>=2.31
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pytest>=8.0
+moto[sqs,sns,s3]>=5.0
