@@ -80,9 +80,32 @@ instance returns an assumed-role ARN.
 
 **Estimate:** 2 to 5 hours. The spread is the point.
 
-**Abort condition:** if EC2 cannot reach RDS by the end of day one, stop and
-switch to DynamoDB with shapely in the correlator. Same three-process shape,
-same rubric coverage, weaker queries. Log the switch in `DECISIONS.md`.
+**Connectivity ladder.** Replaces the original single abort condition, which
+fired far too early. See D-001 for the repricing.
+
+1. `bootstrap.sh` provisions and the exit criteria pass. Expected path.
+2. Connectivity fails. Confirm `attach_sg_to_self` actually ran (E-005), then
+   check subnet routing and that the instance has a public IP.
+3. Put RDS and ElastiCache into the **default** VPC security group alongside
+   their own groups. The default group permits all traffic between its own
+   members, `infra/SETUP.md` launches the instance into it, and
+   `attach_sg_to_self` adds `curbline-app` without removing it, so the host is
+   still a member. Two minutes, and it removes custom security group
+   misconfiguration, the likeliest cause, from the problem entirely.
+   Both modify calls REPLACE the group list rather than append to it. Pass the
+   existing group and the default group together or you silently drop
+   `curbline-db`.
+4. Re-provision RDS from scratch rather than keep debugging it. Roughly twenty
+   minutes, mostly waiting.
+5. Only if a second RDS in the default group still refuses an EC2 host in that
+   same group is this a real VPC or account problem. That is the D-001 flip, and
+   only there does DynamoDB get considered, with the fixture and the report
+   section priced in.
+
+If rung 3 is still in place when evidence is captured, say so in the report. It
+widens the data tier from "only the app tier on 5432" to "any member of the
+default group," which is not public but is not what a least-privilege claim
+describes.
 
 ---
 

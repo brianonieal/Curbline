@@ -54,6 +54,37 @@ aws ec2 run-instances \
 Look up the AMI id for your region rather than copying one; they are
 region-specific and they change.
 
+### Probe-first order, revised 2026-08-27
+
+The command above assumes the role already exists. On a **new AWS account**, run
+the launch first, without `--iam-instance-profile`, and attach the profile
+afterwards with `aws ec2 associate-iam-instance-profile`. A new account can sit
+behind identity or payment verification, and can start with a low or zero vCPU
+quota in a region. Neither is a bug, both can take hours to clear, and neither
+can be compressed by working harder. Getting one instance to `running` is the
+probe that surfaces them; do it before spending time on IAM.
+
+Two things the default security group does not give you:
+
+- **No inbound SSH.** The default group permits all traffic between its own
+  members and nothing from outside, so you cannot reach the box until you add
+  tcp/22 from your own address. `provision.py` opens 22 and 8000 later on
+  `curbline-app`, which is too late to verify step 3.
+- **No key pair by default.** `--key-name` must reference one that exists.
+
+## 2b. Running gate-check
+
+`scripts/gate-check.sh` defaults to bare `python3`, which will not have this
+project's dependencies and reports a **false hard block on the test suite**.
+Point it at the venv:
+
+```bash
+PYTHON=.venv/bin/python ./scripts/gate-check.sh v0.5.0
+```
+
+Verified: bare interpreter reports 18 failed / 4 errors, venv interpreter
+reports 26 passed. The tests are fine; the interpreter was wrong.
+
 ## 3. Verify the role before going further
 
 SSH in and confirm the instance can act as itself:

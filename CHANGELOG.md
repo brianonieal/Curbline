@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow
 
 ---
 
+## [Unreleased]
+
+Process only. No source changes.
+
+### Changed
+- D-001's flip condition. It fired on "EC2 cannot reach RDS by end of build day
+  one," which priced a data-layer rewrite as a swap. It now fires only if a
+  second RDS in the default VPC security group still refuses an EC2 host in that
+  same group.
+- v0.5.0's abort condition is now a five-rung connectivity ladder. Rung 3, adding
+  the default VPC security group to RDS and ElastiCache, removes the likeliest
+  failure cause in about two minutes and did not exist in any earlier version of
+  this plan.
+
+### Note
+Repo initialized under git at v0.4.1. 26 tests verified passing on Python
+3.14.7, previously an assertion in MANIFEST.txt rather than an observation.
+
+---
+
 ## [0.4.1] — 2026-08-27
 
 Documentation and process only. No source changes; the pipeline is byte

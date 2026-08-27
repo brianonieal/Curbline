@@ -23,8 +23,22 @@ free-tier clock. Loses the spatial queries.
 **Cost accepted:** three VPC-bound services instead of one, and RDS taking
 minutes to provision rather than seconds.
 
-**Flips if:** EC2 cannot reach RDS by the end of build day one. Then switch to
-DynamoDB plus shapely, same three-process shape, and log the switch here.
+**Flips if:** a second RDS instance, launched into the default VPC security
+group, still refuses connections from an EC2 host in that same group. Not
+before.
+
+**Revised 2026-08-27.** The original flip fired on "EC2 cannot reach RDS by the
+end of build day one," which mispriced the switch. DynamoDB plus shapely reads
+as a swap and is a data-layer rewrite: 16 functions in `curbline/db.py`, both
+stored functions in `sql/schema.sql` reimplemented in Python, plus scikit-learn
+for DBSCAN and pyproj for the 4326 to 2263 transform. Shapely provides neither
+and neither is in `requirements.txt`. It also deletes
+`tests/fixture_clusters.sql`, the only verification artifact in this repo backed
+by real execution rather than assertion, and it makes the README argue against
+its own "Why PostGIS rather than a key-value store" section. An escape hatch
+that costs more than the failure it escapes is not an escape hatch. The
+connectivity ladder in `VERSION_ROADMAP.md` under v0.5.0 replaces it; every rung
+above this one costs minutes.
 
 ---
 
