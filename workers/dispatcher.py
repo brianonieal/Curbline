@@ -37,9 +37,14 @@ ADVISORY_LEVELS = ["monitor", "advisory", "warning"]
 
 def decide_level(max_depth_cm: float, sensor_count: int,
                  under_alert: bool) -> str:
-    if max_depth_cm >= 20 or (max_depth_cm >= 12 and under_alert):
+    # Thresholds come from config, not literals, because they move with the
+    # reading source (D-005). These were 20/12/10 inline, which silently meant
+    # FloodNet street depth no matter what the collector was actually reading.
+    if (max_depth_cm >= config.WARNING_THRESHOLD_CM
+            or (max_depth_cm >= config.CORROBORATED_WARNING_CM and under_alert)):
         return "warning"
-    if max_depth_cm >= 10 or (sensor_count >= 3 and under_alert):
+    if (max_depth_cm >= config.ADVISORY_THRESHOLD_CM
+            or (sensor_count >= 3 and under_alert)):
         return "advisory"
     return "monitor"
 

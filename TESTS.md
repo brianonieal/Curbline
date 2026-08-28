@@ -4,11 +4,16 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 26 passing, 0 failing.**
+**Current: 29 passing, 0 failing.**
 
 ```bash
-python3 -m pytest tests/ -q
+.venv/bin/python -m pytest tests/ -q
 ```
+
+Use the venv interpreter, not bare `python3`. A bare interpreter lacks
+boto3, moto and psycopg and reports 18 failed with 4 errors, which looks
+like a broken suite and is not one. Same trap as the one `infra/SETUP.md`
+documents for `scripts/gate-check.sh`.
 
 ---
 
@@ -23,6 +28,7 @@ python3 -m pytest tests/ -q
 | `TestWorkerLoop` | 2 | Delete only after success; failed handler leaves the message for retry |
 | `TestAuditOrdering` | 2 | S3 write precedes SNS publish; failed audit blocks the notification |
 | `TestAlertFiltering` | 2 | Null-geometry alerts survive ingest; non-flood events dropped |
+| `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and that an unrecognised source falls back to the sensitive calibration |
 
 ## Integration fixture — `tests/fixture_clusters.sql`
 

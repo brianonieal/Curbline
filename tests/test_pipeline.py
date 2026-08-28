@@ -25,6 +25,10 @@ os.environ.setdefault("CURBLINE_QUEUE_INGEST", "http://q/ingest")
 os.environ.setdefault("CURBLINE_QUEUE_ZONES", "http://q/zones")
 os.environ.setdefault("CURBLINE_SNS_TOPIC", "arn:aws:sns:us-east-1:1:t")
 os.environ.setdefault("CURBLINE_AUDIT_BUCKET", "test-bucket")
+# The advisory ladder below asserts FloodNet boundaries, so pin the source
+# rather than inheriting the usgs default. Under D-005 the thresholds move
+# with the source, which makes "which source" part of what these tests mean.
+os.environ.setdefault("CURBLINE_SOURCE", "floodnet")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
@@ -333,3 +337,25 @@ class TestAlertFiltering:
             collector.poll_alerts()
 
         send.assert_not_called()
+
+
+class TestSourceCalibration:
+    """D-005: detection thresholds move with the reading source.
+
+    These assert the mapping function directly rather than config module state.
+    config reads the environment once at import, so a per-test source cannot be
+    exercised without reloading the module, and the mapping is the part that
+    carries the decision anyway.
+    """
+
+    def test_floodnet_is_street_depth(self):
+        from curbline.config import thresholds_for
+        assert thresholds_for("floodnet") == (5.0, 10.0, 20.0)
+
+    def test_usgs_is_an_order_of_magnitude_higher(self):
+        from curbline.config import thresholds_for
+        assert thresholds_for("usgs") == (60.0, 90.0, 120.0)
+
+    def test_unknown_source_falls_back_to_the_sensitive_calibration(self):
+        from curbline.config import thresholds_for
+        assert thresholds_for("nonesuch") == thresholds_for("floodnet")

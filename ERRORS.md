@@ -296,6 +296,33 @@ production on the graded instance.
 
 ---
 
+## E-014 — Shipped defaults contradicted a decision that was already logged
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** one miscalibrated evidence screenshot
+
+**Symptom:** the first live dashboard reported 17 of 28 sensors wet, one open
+zone, and a deepest reading of 151.8 cm.
+
+**Root cause:** `config.SOURCE` defaulted to `usgs` while `DEPTH_THRESHOLD_CM`
+defaulted to 5.0, and `workers/dispatcher.py` hardcoded the advisory and warning
+tiers at 10 and 20. Those are FloodNet street-depth numbers being applied to
+USGS stage rise, which D-005 explicitly decided against. The comment block above
+the defaults described the problem accurately and then did nothing about it. The
+decision was logged and never implemented.
+
+**Fix:** `thresholds_for(source)` in `config.py` maps floodnet and replay to
+5/10/20 and usgs to 60/90/120, with an unknown source falling back to FloodNet
+because over-reporting is the safe direction. `decide_level` reads config rather
+than literals. `TestSourceCalibration` asserts the mapping, and the ladder tests
+now pin `CURBLINE_SOURCE=floodnet` instead of passing by coincidence.
+
+**Prevention:** a decision in DECISIONS.md is a claim about the code, and
+nothing was checking it. The tell here was a comment that explained the correct
+behaviour in the imperative ("Raise these substantially when running on USGS")
+next to a default that did not do it. Prose instructing a future reader to do
+something the code could do itself is a defect, not documentation.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
