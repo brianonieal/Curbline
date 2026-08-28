@@ -1,7 +1,84 @@
 # Run book and evidence checklist
 
-Two days, four blocks. The order is chosen so the riskiest work happens while
-there is still time to recover from it.
+**Blocks 1 through 3 below are history.** They describe the original build and
+are kept because they record why the order was chosen. If you are picking this
+up to finish the submission, use the capture session immediately below and
+ignore them unless something breaks.
+
+---
+
+## THE CAPTURE SESSION
+
+One sitting. The stack bills hourly from the first command to teardown, so the
+sequence is ordered to make that window short and to put anything with a human
+in the loop at the front.
+
+**Before you start, have ready:** your own public IP (from *your* machine, not
+the instance, see E-008), and access to the mailbox for the SNS subscription.
+
+```bash
+# 1. Provision. ~20 min, mostly waiting on RDS.
+AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=<your-ip>/32 ./infra/bootstrap.sh
+```
+
+**2. Confirm the SNS subscription NOW, before anything publishes.** AWS emails a
+confirmation link the moment the subscription is created. An unconfirmed
+subscription silently drops every publication, so advisories issued before you
+click it are gone and cannot be replayed into your inbox. This is the item that
+has slipped past two gates; it slips because it feels like it can wait, and it
+cannot.
+
+```bash
+# 3. Prove connectivity before doing anything else.
+set -a; source .env; set +a
+PGPASSWORD="$CURBLINE_DB_PASSWORD" psql -P pager=off -h "$CURBLINE_DB_HOST" \
+  -U "$CURBLINE_DB_USER" -d "$CURBLINE_DB_NAME" -c "SELECT PostGIS_Full_Version();"
+redis-cli -h "$CURBLINE_CACHE_HOST" ping
+
+# 4. Cache degradation test, FIRST, not last. Full procedure below under
+#    "Run this FIRST". Capture the amber pair, restore, confirm green.
+
+# 5. Let the pipeline run long enough to escalate. The replay storm has to
+#    climb through monitor -> advisory -> warning for the E-021 evidence to
+#    exist at all. Watch until a second advisory appears for one zone:
+watch -n10 'PGPASSWORD=$CURBLINE_DB_PASSWORD psql -tA -h $CURBLINE_DB_HOST \
+  -U $CURBLINE_DB_USER -d $CURBLINE_DB_NAME \
+  -c "SELECT zone_id, count(*) FROM advisories GROUP BY zone_id"'
+
+# 6. One command for every textual artifact.
+./scripts/capture-evidence.sh
+cat docs/evidence/cli/MANIFEST.md
+```
+
+**7. Screenshots.** Six AWS console shots plus the console UI set. Filenames are
+fixed in the checklist below and match Appendix C exactly, so they drop in
+without renaming.
+
+**8. Read the manifest before tearing anything down.** Every MISSING line either
+gets resolved by re-running or written into its Appendix C row with the reason.
+Teardown is irreversible and re-provisioning is another twenty minutes.
+
+```bash
+# 9. Commit while the stack still exists, in case something needs re-capturing.
+git add docs/evidence && git commit -m "Evidence from the capture session"
+
+# 10. Tear down. Not optional; RDS and ElastiCache bill hourly.
+python3 infra/teardown.py --confirm
+
+# 11. Confirm nothing billable survived. An empty result from a regional API
+#     means check the region first, not that the resource is gone. See E-018.
+aws rds describe-db-instances --region us-east-1
+aws elasticache describe-cache-clusters --region us-east-1
+```
+
+**The two things to verify by eye before teardown,** because they are the only
+proof that this session's two severe fixes work in production rather than only
+in unit tests:
+
+- `advisories-per-zone.txt` shows a zone with **more than one** advisory and a
+  rising ladder. One row per zone means E-021 is still suppressing escalation.
+- `zone-states.txt` shows a zone that is not `forming` or `active`. All zones
+  open forever means E-020's sweep thread is not running.
 
 ---
 
@@ -29,9 +106,16 @@ redis-cli -h "$CURBLINE_CACHE_HOST" ping
 
 If either fails, stop and fix networking. Do not start writing features.
 
-**Abort condition.** If EC2 still cannot reach RDS by end of day one, switch to
-DynamoDB with shapely in the worker. Same three-process shape, same rubric
-coverage, weaker queries. A working demo beats an elegant one that does not run.
+**Abort condition, superseded.** This said "if EC2 cannot reach RDS by end of
+day one, switch to DynamoDB". That priced a rewrite of the data layer, the
+fixture and a report section as though it were a swap, and it fired far too
+early. D-001 was repriced and `VERSION_ROADMAP.md` replaced it with a five-rung
+connectivity ladder: check the security group self-attach (E-005), then subnet
+routing, then put RDS and ElastiCache in the default VPC group alongside their
+own, then re-provision RDS from scratch. Only if a second RDS in the default
+group still refuses an EC2 host in that same group is this a real account
+problem, and only there does DynamoDB get considered. Use the ladder, not this
+paragraph.
 
 ---
 
