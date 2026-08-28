@@ -1,7 +1,7 @@
 # Curbline: architecture and implementation report
 
 **Author:** Brian Onieal
-**Course:** Johns Hopkins University, Cloud Computing [course number]
+**Course:** Johns Hopkins University, Cloud Computing
 **Submitted:** 2026-08-28
 **Repository:** https://github.com/brianonieal/Curbline
 
