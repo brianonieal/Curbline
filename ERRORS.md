@@ -502,6 +502,84 @@ least one reading before the capture.
 
 ---
 
+## E-020 - No zone ever recedes or closes, and open_zones grows forever
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit before it reached a demo
+
+**Symptom:** every zone in the database sits at `forming` or `active`. Nothing
+is ever `receding` or `closed`, `closed_at` is NULL on every row, and
+`db.open_zones()` returns every zone ever detected, growing without bound.
+
+**Root cause:** `next_state` receded on
+`sensor_count < config.CLUSTER_MIN_SENSORS`. That comparison can never be true.
+`current_clusters()` is called with `p_minpoints := config.CLUSTER_MIN_SENSORS`
+(`db.py`), and `schema.sql` filters `WHERE cid IS NOT NULL` before
+`GROUP BY cid`, so every row it returns is a DBSCAN cluster with at least
+minpoints members. `COUNT(*)::INT >= p_minpoints` holds by construction. The
+`receding` branch was unreachable and `closed` was returned by nothing.
+
+Underneath that is a design gap rather than a typo: a zone stops flooding by
+**disappearing** from the cluster set, and disappearance is not an event any
+single queue message can carry. The dispatcher only ever saw zones that still
+existed.
+
+**Fix:** recession is now driven by absence. `next_state` no longer takes a
+count, because arriving on the queue at all means the zone is still clustering.
+`db.stale_open_zones()` finds zones whose `updated_at` has gone quiet past
+`ZONE_STALE_MINUTES`, and `sweep_state` walks them forming/active -> receding ->
+closed in two steps, mirroring the forming delay on the way in so one missed
+cycle is not read as the end of a flood. The sweep runs on a timer in a daemon
+thread, the same shape the collector already uses for alerts, because the case
+that matters is a flood ending: no clusters means no messages, so a
+message-driven sweep would never fire on exactly the zones that need closing.
+`db.set_zone_state` deliberately does not bump `updated_at`, since that column
+records when the clustering last saw the zone.
+
+**Prevention:** the test suite asserted `next_state("active", 1) == "receding"`
+and passed, on an input the pipeline cannot produce. This is E-017's lesson
+again from the other direction: there, a correct pure function was fed a wrongly
+obtained argument; here, a pure function was tested against an argument that
+never occurs. **A passing test on an unreachable input is not coverage.** The
+regression test now asserts against reachable inputs only.
+
+---
+
+## E-021 - Each zone issues at most one advisory, ever
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit before it reached a demo
+
+**Symptom:** a zone activates, issues one advisory, and never issues another.
+Water rising from 10 cm to 25 cm on the same zone produces no `warning`, no S3
+audit object and no SNS publication, while `zones.max_depth_cm` quietly updates
+to 25.
+
+**Root cause:** the duplicate-advisory guard compared `state` and `under_alert`
+and not `level`:
+
+```python
+if previous and previous["state"] == state and previous["under_alert"] == under_alert:
+    return
+```
+
+The comment directly above it read "Do not re-notify at an unchanged level for
+an unchanged zone." The code never looked at a level. An escalating zone holds
+`state == "active"` and unchanged corroboration, so it compared equal to its own
+previous cycle and was suppressed. Combined with E-020, which pinned every zone
+at `active` forever, each zone notified exactly once at whatever level it
+happened to carry when it first activated.
+
+**Fix:** `should_notify()` is now a pure function with `level` in the key, and
+`open_zones()` carries `last_level` from a lateral join against `advisories`,
+which is the level the zone last actually **notified** at rather than the level
+it would rate now. A zone whose `last_level` is NULL has never issued an
+advisory; NULL is not equal to any real level, so the first genuine advisory is
+not silenced. Asserted by `TestAdvisorySuppression`.
+
+**Prevention:** a comment describing a comparison the code does not make is
+worse than no comment, because it stops the next reader from checking. When the
+guard and its comment disagree, one of them is a defect. This one was found by
+reading the comment and then the line.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

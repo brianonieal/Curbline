@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from typing import Any
 
 from curbline import aws, config, db
@@ -49,23 +50,66 @@ def decide_level(max_depth_cm: float, sensor_count: int,
     return "monitor"
 
 
-def next_state(previous: str | None, sensor_count: int) -> str:
+def next_state(previous: str | None) -> str:
     """
-    Zone lifecycle.
+    Zone lifecycle for a zone that is currently clustering.
 
     A zone that appears for the first time is 'forming' rather than 'active'.
     That one-cycle delay is intentional: it suppresses single-cycle sensor
     noise from generating an advisory. The cost is roughly one poll interval
     of latency on a genuine event, which is an acceptable trade against
     crying wolf.
+
+    Every message on the zones queue describes a cluster that exists right now,
+    so arriving here at all means the zone is still wet. There is no branch to
+    recede on, and there used to be: `sensor_count < CLUSTER_MIN_SENSORS` can
+    never hold, because current_clusters() is called with
+    p_minpoints := CLUSTER_MIN_SENSORS and discards noise, so every row it
+    returns already has at least that many members. Recession is the absence of
+    a message, which is sweep_state's job. See E-020.
     """
     if previous is None:
         return "forming"
-    if previous == "forming":
-        return "active"
-    if previous in ("active", "receding"):
-        return "active" if sensor_count >= config.CLUSTER_MIN_SENSORS else "receding"
     return "active"
+
+
+def sweep_state(previous: str) -> str | None:
+    """
+    The other half of the lifecycle: what a zone becomes when it stops being
+    republished. Returns None for a zone that needs no transition.
+
+    Two steps rather than one, mirroring the forming delay on the way in. A
+    single missed cycle is a gap in the data, not the end of a flood.
+    """
+    if previous in ("forming", "active"):
+        return "receding"
+    if previous == "receding":
+        return "closed"
+    return None
+
+
+def should_notify(previous: dict[str, Any] | None, state: str,
+                  level: str, under_alert: bool) -> bool:
+    """
+    Whether this cycle's zone warrants an advisory.
+
+    `level` is in the key, and its absence was E-021: a zone escalating from
+    advisory to warning while staying active with unchanged corroboration
+    compared equal to its previous cycle and was suppressed. The comment above
+    the old check said "unchanged level" while the code never looked at one.
+
+    A previous zone with last_level None has never issued an advisory. That is
+    not equal to any real level and must not silence the first one.
+    """
+    if state == "forming":
+        return False
+    if previous is None:
+        return True
+    return not (
+        previous["state"] == state
+        and previous.get("last_level") == level
+        and previous["under_alert"] == under_alert
+    )
 
 
 def build_message(zone_id: str, level: str, body: dict[str, Any],
@@ -107,7 +151,7 @@ def handle(body: dict[str, Any]) -> None:
     previous = existing.get(str(zone_id))
     previous_state = previous["state"] if previous else None
 
-    state = next_state(previous_state, body["sensor_count"])
+    state = next_state(previous_state)
     level = decide_level(max_depth, body["sensor_count"], under_alert)
 
     db.upsert_zone(
@@ -125,10 +169,9 @@ def handle(body: dict[str, Any]) -> None:
         log.info("zone %s forming, no advisory yet", zone_id)
         return
 
-    # Do not re-notify at an unchanged level for an unchanged zone.
-    if previous and previous["state"] == state and previous["under_alert"] == under_alert:
-        log.info("zone %s unchanged (%s), suppressing duplicate advisory",
-                 zone_id, state)
+    if not should_notify(previous, state, level, under_alert):
+        log.info("zone %s unchanged (%s at %s), suppressing duplicate advisory",
+                 zone_id, state, level)
         return
 
     message = build_message(zone_id, level, body, state)
@@ -170,10 +213,41 @@ def handle(body: dict[str, Any]) -> None:
              zone_id, state, level, advisory_id, audit_key)
 
 
+def sweep_zones() -> None:
+    """
+    Retire zones the clustering has stopped finding.
+
+    This has to run on a timer rather than per message. The case that matters
+    is a flood ending: the clusters disappear, so no zone messages arrive, so a
+    message-driven sweep would never fire on exactly the zones that need
+    closing. That is why the dispatcher now has a cadence as well as a queue.
+    """
+    stale = db.stale_open_zones(config.ZONE_STALE_MINUTES)
+    for zone in stale:
+        nxt = sweep_state(zone["state"])
+        if nxt is None:
+            continue
+        db.set_zone_state(zone["zone_id"], nxt)
+        log.info("zone %s not reclustered for %d min: %s -> %s",
+                 zone["zone_id"], config.ZONE_STALE_MINUTES,
+                 zone["state"], nxt)
+
+
 def main() -> int:
     shutdown = aws.Shutdown()
+
+    # Same shape as the collector's alert thread: a second cadence that must
+    # keep running even while the main loop is blocked on a long poll.
+    sweeper = threading.Thread(
+        target=aws.poll_loop,
+        args=(sweep_zones, config.ZONE_SWEEP_SECONDS, shutdown),
+        daemon=True,
+    )
+    sweeper.start()
+
     log.info("consuming %s", config.QUEUE_ZONES)
     aws.consume(config.QUEUE_ZONES, handle, shutdown)
+    sweeper.join(timeout=5)
     log.info("dispatcher stopped")
     return 0
 

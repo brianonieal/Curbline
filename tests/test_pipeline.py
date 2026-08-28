@@ -97,19 +97,106 @@ class TestLifecycle:
     def test_new_zone_forms_before_it_activates(self):
         """The one-cycle delay that suppresses single-cycle sensor noise."""
         from workers.dispatcher import next_state
-        assert next_state(None, 3) == "forming"
+        assert next_state(None) == "forming"
 
     def test_forming_promotes_to_active(self):
         from workers.dispatcher import next_state
-        assert next_state("forming", 3) == "active"
+        assert next_state("forming") == "active"
 
-    def test_active_recedes_when_sensors_drop_below_minimum(self):
+    def test_a_republished_zone_stays_active(self):
         from workers.dispatcher import next_state
-        assert next_state("active", 1) == "receding"
+        assert next_state("active") == "active"
 
-    def test_receding_recovers_if_sensors_return(self):
+    def test_receding_recovers_when_the_zone_is_published_again(self):
+        """
+        Recession is decided by absence, not by the message. A zone that shows
+        up on the queue again is by definition still clustering, so it recovers.
+        """
         from workers.dispatcher import next_state
-        assert next_state("receding", 3) == "active"
+        assert next_state("receding") == "active"
+
+
+class TestRecessionIsDrivenByAbsence:
+    """
+    E-020. next_state used to recede on `sensor_count < CLUSTER_MIN_SENSORS`,
+    which cannot happen: current_clusters() is called with
+    p_minpoints := CLUSTER_MIN_SENSORS and schema.sql filters
+    `WHERE cid IS NOT NULL`, so every row it returns is a DBSCAN cluster with at
+    least minpoints members. The comparison was a tautology, `receding` was
+    unreachable, and no zone ever closed.
+
+    A zone stops being flooded by disappearing from the cluster set, which is
+    an event no per-message handler can observe. It has to be swept for.
+    """
+
+    def test_a_zone_the_pipeline_can_produce_never_recedes_by_count(self):
+        """The regression guard: assert against reachable inputs only."""
+        from workers.dispatcher import next_state
+        from curbline import config
+        # The smallest cluster current_clusters() can emit.
+        assert config.CLUSTER_MIN_SENSORS >= 1
+        assert next_state("active") == "active"
+
+    def test_stale_active_zone_recedes(self):
+        from workers.dispatcher import sweep_state
+        assert sweep_state("active") == "receding"
+        assert sweep_state("forming") == "receding"
+
+    def test_stale_receding_zone_closes(self):
+        from workers.dispatcher import sweep_state
+        assert sweep_state("receding") == "closed"
+
+    def test_a_closed_zone_is_left_alone(self):
+        from workers.dispatcher import sweep_state
+        assert sweep_state("closed") is None
+
+
+class TestAdvisorySuppression:
+    """
+    E-021. The suppression key omitted `level`, so a zone escalating from
+    advisory to warning while staying `active` with unchanged corroboration was
+    treated as unchanged and never re-notified. Combined with E-020 that meant
+    each zone issued at most one advisory ever, at the level it happened to
+    carry when it first activated.
+    """
+
+    def test_escalation_notifies_even_when_state_is_unchanged(self):
+        from workers.dispatcher import should_notify
+        previous = {"state": "active", "last_level": "advisory",
+                    "under_alert": False}
+        assert should_notify(previous, "active", "warning", False) is True, (
+            "rising water that crosses a threshold must reach a human"
+        )
+
+    def test_an_unchanged_level_is_suppressed(self):
+        from workers.dispatcher import should_notify
+        previous = {"state": "active", "last_level": "advisory",
+                    "under_alert": False}
+        assert should_notify(previous, "active", "advisory", False) is False
+
+    def test_new_corroboration_notifies(self):
+        from workers.dispatcher import should_notify
+        previous = {"state": "active", "last_level": "advisory",
+                    "under_alert": False}
+        assert should_notify(previous, "active", "advisory", True) is True
+
+    def test_a_forming_zone_never_notifies(self):
+        from workers.dispatcher import should_notify
+        assert should_notify(None, "forming", "warning", True) is False
+
+    def test_a_zone_with_no_history_notifies(self):
+        from workers.dispatcher import should_notify
+        assert should_notify(None, "active", "monitor", False) is True
+
+    def test_a_zone_that_never_issued_an_advisory_notifies(self):
+        """
+        last_level is NULL for a zone that formed, activated and was suppressed
+        before any advisory was written. That must not compare equal to a real
+        level and silence the first genuine one.
+        """
+        from workers.dispatcher import should_notify
+        previous = {"state": "active", "last_level": None, "under_alert": False}
+        assert should_notify(previous, "active", "monitor", False) is True
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +328,64 @@ class TestCacheStatsTransport:
         assert got["hit_rate"] is None, (
             "no reads yet is unknown, not a 0% hit rate"
         )
+
+
+# ---------------------------------------------------------------------------
+# Worker liveness. An empty queue and a dead worker look identical from the
+# API, so health has to ask the workers directly rather than infer them.
+# ---------------------------------------------------------------------------
+
+class TestWorkerHeartbeat:
+    def setup_method(self):
+        from curbline import cache
+        cache._client = None
+
+    def test_beat_writes_a_key_that_expires(self):
+        from curbline import cache
+        fake = mock.MagicMock()
+        with mock.patch.object(cache, "client", return_value=fake):
+            cache.beat("correlator")
+        key, ttl, _value = fake.setex.call_args.args
+        assert key == "heartbeat:correlator"
+        assert ttl > 0, "a heartbeat that never expires cannot report death"
+
+    def test_a_silent_worker_reads_as_not_live(self):
+        """
+        The point of the whole mechanism. A stopped worker stops refreshing its
+        key, the key expires, and liveness has to report that rather than
+        assuming the worker is fine because nothing said otherwise.
+        """
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.mget.return_value = ["2026-08-28T21:00:00Z", None, None]
+        with mock.patch.object(cache, "client", return_value=fake):
+            live = cache.worker_liveness()
+        assert live["collector"] is True
+        assert live["correlator"] is False
+        assert live["dispatcher"] is False
+
+    def test_unreachable_cache_reports_unknown_not_dead(self):
+        """
+        A dead Redis must not be reported as three dead workers. The workers
+        may well be running; what is unavailable is the evidence.
+        """
+        import redis
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.mget.side_effect = redis.RedisError("down")
+        with mock.patch.object(cache, "client", return_value=fake):
+            live = cache.worker_liveness()
+        assert all(v is None for v in live.values()), (
+            "unknown is a third state and must not collapse into False"
+        )
+
+    def test_beat_never_raises_into_the_pipeline(self):
+        import redis
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.setex.side_effect = redis.RedisError("down")
+        with mock.patch.object(cache, "client", return_value=fake):
+            cache.beat("collector")  # must not raise
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +586,32 @@ class TestSourceCalibration:
     def test_unknown_source_falls_back_to_the_sensitive_calibration(self):
         from curbline.config import thresholds_for
         assert thresholds_for("nonesuch") == thresholds_for("floodnet")
+
+    def test_every_buildable_source_has_its_own_thresholds(self):
+        """
+        The two fallbacks disagree, and that is the E-014 failure again.
+        thresholds_for() falls back to FloodNet's 5/10/20; build_source() falls
+        back to USGS. A typo in CURBLINE_SOURCE would therefore collect river
+        stage and grade it against street thresholds, which is the exact
+        order-of-magnitude error D-005 exists to prevent. Neither fallback is
+        wrong alone; they are wrong together, so the names must not drift apart.
+        """
+        from curbline.config import _THRESHOLDS
+        from curbline import sources
+        assert set(sources.SOURCES) == set(_THRESHOLDS), (
+            "every source build_source() can construct needs a calibration, "
+            "and every calibration needs a source, or the fallbacks diverge"
+        )
+
+    def test_an_unrecognised_source_is_rejected_rather_than_guessed(self):
+        from curbline.config import validate_source
+        with pytest.raises(ValueError, match="CURBLINE_SOURCE"):
+            validate_source("floodnett")
+
+    def test_a_recognised_source_validates_quietly(self):
+        from curbline.config import validate_source
+        for name in ("floodnet", "usgs", "replay"):
+            validate_source(name)
 
 
 class TestZoneLookupTypes:

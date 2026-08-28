@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 import redis
@@ -162,6 +163,53 @@ def read_stats() -> dict[str, Any]:
         "errors": errors,
         "hit_rate": round(hits / total, 3) if total else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Worker liveness. Redis is the only store all four processes already share, so
+# it carries the heartbeat as well as the counters above. This module is
+# therefore the Redis-backed shared state layer, not only a read-through cache.
+# ---------------------------------------------------------------------------
+
+WORKERS = ("collector", "correlator", "dispatcher")
+
+# Comfortably longer than a 20 second long poll plus a slow cycle, short enough
+# that a stopped worker shows up while someone is still looking at the screen.
+HEARTBEAT_TTL_SECONDS = 120
+
+
+def beat(component: str) -> None:
+    """
+    Record that this component is still working.
+
+    Never raises. A worker that cannot report liveness must keep doing its
+    actual job; failing the pipeline to update a status indicator would make
+    the indicator the most fragile part of the system.
+    """
+    try:
+        client().setex(
+            f"heartbeat:{component}",
+            HEARTBEAT_TTL_SECONDS,
+            datetime.now(timezone.utc).isoformat(),
+        )
+    except redis.RedisError as exc:
+        log.warning("heartbeat write failed for %s: %s", component, exc)
+
+
+def worker_liveness() -> dict[str, bool | None]:
+    """
+    True if the component beat recently, False if its key has expired, None if
+    the answer is unavailable.
+
+    None is a real third state and is not allowed to collapse into False. An
+    unreachable Redis means the evidence is missing, not that three workers
+    died, and reporting the second would send someone to debug the wrong thing.
+    """
+    try:
+        raw = client().mget([f"heartbeat:{w}" for w in WORKERS])
+    except redis.RedisError:
+        return {w: None for w in WORKERS}
+    return {w: v is not None for w, v in zip(WORKERS, raw)}
 
 
 def healthy() -> bool:

@@ -160,10 +160,25 @@ def open_zones() -> list[dict[str, Any]]:
     with cursor() as cur:
         cur.execute(
             """
-            SELECT zone_id::text AS zone_id, sensor_ids, sensor_count,
-                   max_depth_cm, state, under_alert, alert_id, opened_at,
-                   updated_at, ST_AsGeoJSON(hull) AS hull_geojson
-            FROM zones WHERE state <> 'closed'
+            SELECT z.zone_id::text AS zone_id, z.sensor_ids, z.sensor_count,
+                   z.max_depth_cm, z.state, z.under_alert, z.alert_id,
+                   z.opened_at, z.updated_at,
+                   ST_AsGeoJSON(z.hull) AS hull_geojson,
+                   -- The level this zone last actually notified at, not the
+                   -- level it would rate now. should_notify compares against
+                   -- it, and without it an escalation reads as unchanged and
+                   -- is suppressed. NULL means no advisory has ever issued.
+                   -- See E-021. Lateral rather than a second round trip.
+                   last.level AS last_level
+            FROM zones z
+            LEFT JOIN LATERAL (
+                SELECT a.level
+                FROM advisories a
+                WHERE a.zone_id = z.zone_id
+                ORDER BY a.issued_at DESC
+                LIMIT 1
+            ) AS last ON TRUE
+            WHERE z.state <> 'closed'
             """
         )
         return cur.fetchall()
@@ -196,6 +211,48 @@ def upsert_zone(
             """,
             (zone_id, hull_geojson, sensor_ids, len(sensor_ids),
              max_depth_cm, state, alert_id is not None, alert_id),
+        )
+
+
+def stale_open_zones(older_than_mins: int) -> list[dict[str, Any]]:
+    """
+    Open zones that have not been republished recently.
+
+    A zone stops being flooded by vanishing from the cluster set, which is an
+    event no single queue message can carry. The correlator republishes every
+    live cluster each cycle, so a zone whose updated_at has gone quiet is one
+    the clustering no longer finds. See E-020.
+    """
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT zone_id::text AS zone_id, state
+            FROM zones
+            WHERE state <> 'closed'
+              AND updated_at < now() - (%s || ' minutes')::interval
+            """,
+            (older_than_mins,),
+        )
+        return cur.fetchall()
+
+
+def set_zone_state(zone_id: str, state: str) -> None:
+    """Advance a zone's lifecycle without touching its geometry or depth.
+
+    updated_at is deliberately NOT bumped: it records when the clustering last
+    saw this zone, and a sweep is the clustering not seeing it. Refreshing it
+    here would make the zone look alive again and it would never close.
+    """
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE zones
+               SET state = %s,
+                   closed_at = CASE WHEN %s = 'closed' THEN now()
+                                    ELSE closed_at END
+             WHERE zone_id = %s
+            """,
+            (state, state, zone_id),
         )
 
 

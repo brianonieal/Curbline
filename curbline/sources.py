@@ -252,10 +252,23 @@ class ReplaySource:
             )
 
 
+# Every source build_source() can construct. config._THRESHOLDS must carry a
+# calibration for each of these and nothing else; TestSourceCalibration asserts
+# the two stay in step. They diverged silently before: this returned USGS for an
+# unrecognised name while thresholds_for() returned FloodNet's, so a typo in
+# CURBLINE_SOURCE collected river stage and graded it against street depth.
+# That is E-014 arriving by a different road.
+SOURCES = frozenset({"floodnet", "usgs", "replay"})
+
+
 def build_source() -> ReadingSource:
     import os
 
     kind = config.SOURCE.lower()
+    # Fail here rather than fall through to USGS. A misspelled source is a
+    # configuration error, and guessing which one was meant is how the
+    # collector and the thresholds end up describing different rivers.
+    config.validate_source(kind)
     if kind == "floodnet":
         base = os.environ.get("CURBLINE_FLOODNET_URL")
         if not base:

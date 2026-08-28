@@ -87,6 +87,21 @@ def thresholds_for(source: str) -> tuple[float, float, float]:
     return _THRESHOLDS.get(source, _THRESHOLDS["floodnet"])
 
 
+def validate_source(source: str) -> None:
+    """Raise on a source with no calibration, rather than guess one.
+
+    thresholds_for() falls back to the sensitive calibration and build_source()
+    used to fall back to USGS. Each fallback is defensible alone. Together they
+    mean a typo produces a collector reading gage height and a dispatcher
+    grading it against street depth, which is E-014 with a different cause.
+    """
+    if source not in _THRESHOLDS:
+        raise ValueError(
+            f"CURBLINE_SOURCE={source!r} has no threshold calibration. "
+            f"Known sources: {', '.join(sorted(_THRESHOLDS))}."
+        )
+
+
 _detect, _advisory, _warning = thresholds_for(SOURCE)
 
 DEPTH_THRESHOLD_CM = float(os.environ.get("CURBLINE_DEPTH_THRESHOLD_CM", _detect))
@@ -120,6 +135,14 @@ CLUSTER_MIN_SENSORS = int(os.environ.get("CURBLINE_CLUSTER_MIN_SENSORS", "2"))
 # Poll cadences, seconds.
 SENSOR_POLL_SECONDS = int(os.environ.get("CURBLINE_SENSOR_POLL", "60"))
 ALERT_POLL_SECONDS = int(os.environ.get("CURBLINE_ALERT_POLL", "300"))
+
+# How long a zone can go without being reclustered before it starts receding.
+# Deliberately longer than READING_WINDOW_MINS: a zone that has aged out of the
+# reading window has genuinely stopped clustering, and the margin absorbs one
+# missed collector poll without retiring a zone that is still flooding.
+ZONE_STALE_MINUTES = int(os.environ.get(
+    "CURBLINE_ZONE_STALE_MINUTES", str(READING_WINDOW_MINS + 5)))
+ZONE_SWEEP_SECONDS = int(os.environ.get("CURBLINE_ZONE_SWEEP", "60"))
 
 
 # NWS requires a User-Agent that identifies the caller. Requests without one
