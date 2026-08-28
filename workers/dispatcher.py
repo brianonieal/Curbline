@@ -112,6 +112,32 @@ def should_notify(previous: dict[str, Any] | None, state: str,
     )
 
 
+def audit_detection(body: dict[str, Any]) -> dict[str, Any]:
+    """
+    The detection parameters to record, and where they came from.
+
+    Clustering happens in the correlator. This process can be restarted alone,
+    which is what `DEMO.md` tells an operator to do when changing a threshold,
+    and it would then attest to values that never produced anything. For the one
+    artifact whose whole purpose is saying why a decision was made, plausible
+    and wrong is worse than absent.
+
+    A message with no `detection` block predates this and cannot be recovered
+    from. Substituting local config is the reasonable thing to do; doing it
+    silently is not, so the substitution is named in the record. See E-027.
+    """
+    carried = body.get("detection")
+    if carried:
+        return {**carried, "provenance": "correlator"}
+    return {
+        "depth_threshold_cm": config.DEPTH_THRESHOLD_CM,
+        "cluster_eps_ft": config.CLUSTER_EPS_FT,
+        "cluster_min_sensors": config.CLUSTER_MIN_SENSORS,
+        "reading_window_mins": config.READING_WINDOW_MINS,
+        "provenance": "dispatcher_config_fallback",
+    }
+
+
 def build_message(zone_id: str, level: str, body: dict[str, Any],
                   state: str) -> str:
     depth_in = float(body["max_depth_cm"]) / 2.54
@@ -185,11 +211,17 @@ def handle(body: dict[str, Any]) -> None:
         "max_depth_cm": max_depth,
         "alert_id": alert_id,
         "hull": body["hull_geojson"],
-        "thresholds": {
-            "depth_threshold_cm": config.DEPTH_THRESHOLD_CM,
-            "cluster_eps_ft": config.CLUSTER_EPS_FT,
-            "cluster_min_sensors": config.CLUSTER_MIN_SENSORS,
-            "reading_window_mins": config.READING_WINDOW_MINS,
+        # Split by which process owns each half. Detection made the cluster and
+        # belongs to the correlator; the ladder graded it and belongs here. They
+        # were previously merged and both read locally, which quietly credited
+        # this process with a decision it did not make.
+        "detection": audit_detection(body),
+        "advisory": {
+            "advisory_threshold_cm": config.ADVISORY_THRESHOLD_CM,
+            "warning_threshold_cm": config.WARNING_THRESHOLD_CM,
+            "corroborated_warning_cm": config.CORROBORATED_WARNING_CM,
+            "source": config.SOURCE,
+            "provenance": "dispatcher",
         },
         "message": message,
     })

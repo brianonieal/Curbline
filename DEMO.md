@@ -62,15 +62,27 @@ systemctl status 'curbline-*'
 journalctl -u curbline-correlator -f
 ```
 
-Force a zone without waiting for weather, by lowering the threshold:
+Force a zone without waiting for weather, by lowering the threshold. Restart all
+four units, not two:
 
 ```bash
 sudo systemctl set-environment CURBLINE_DEPTH_THRESHOLD_CM=0.5
-sudo systemctl restart curbline-correlator curbline-dispatcher
+sudo systemctl restart curbline-collector curbline-correlator \
+                       curbline-dispatcher curbline-api
 ```
 
-Put it back before capturing evidence. A threshold of 0.5 cm produces zones
-from noise, which is fine for proving the wiring and dishonest for a screenshot.
+**Why all four.** Config is read once at import, per process, so a restarted
+subset leaves the others holding the old value. This used to be written as
+correlator and dispatcher only, which skews two things at once: the console
+keeps drawing its gauge and empty-state copy from the API's stale thresholds
+(E-014's shape), and the dispatcher's audit record would attest parameters the
+correlator was not using (E-027). The second is now carried in the message and
+cannot skew, but the console still can, and a screenshot of a dashboard
+describing a threshold the pipeline is not applying is worse than no screenshot.
+
+Put it back before capturing evidence, and restart all four again. A threshold
+of 0.5 cm produces zones from noise, which is fine for proving the wiring and
+dishonest for a screenshot.
 
 Confirm each stage independently:
 

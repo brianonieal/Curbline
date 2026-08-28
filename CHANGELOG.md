@@ -55,6 +55,12 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-027.** The S3 audit record named the four detection parameters by
+  reading the dispatcher's own config, while clustering ran in the correlator
+  with its copy. The correlator now carries them in the message and the record
+  is split into `detection` and `advisory` blocks, each naming its provenance.
+  The advisory thresholds were not recorded at all before, so the record could
+  not explain the level it assigned.
 - **E-026.** A collector restart mid-storm silently stopped detection at a
   site. The USGS baseline lived only in process memory and fell back to the
   current reading when the history fetch failed, making the rise exactly zero.
@@ -66,7 +72,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 34 tests. 31 to 65. `should_notify`, `sweep_state` and `health_status`
+- 37 tests. 31 to 68. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

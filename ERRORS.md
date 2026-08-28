@@ -753,6 +753,55 @@ restart.
 
 ---
 
+## E-027 - The audit record attests parameters the clustering never used
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit; corrupts the one artifact whose purpose is provenance
+
+**Symptom:** an S3 audit record names a `depth_threshold_cm` that differs from
+the value the correlator was clustering with when it produced that zone. The
+record is internally consistent, plausible, and wrong.
+
+**Root cause:** the dispatcher built the `thresholds` block by reading
+`config.DEPTH_THRESHOLD_CM`, `CLUSTER_EPS_FT`, `CLUSTER_MIN_SENSORS` and
+`READING_WINDOW_MINS` from **its own process**. All four are detection
+parameters, and detection runs in the correlator, which is a different process
+with its own copy of config read at import.
+
+At rest they agree: no systemd unit declares an `EnvironmentFile`, all four read
+the same repo-root `.env`, so the values match. They diverge the moment one unit
+is restarted alone, and `DEMO.md` documented exactly that as the procedure for
+forcing a zone. The audit record is the artifact whose entire purpose is to say
+why a decision was made, and for it, plausible and wrong is worse than absent.
+
+**Fix:** the correlator now carries the four parameters it actually clustered
+with in the zone message, and the dispatcher echoes them. The record is split by
+ownership: a `detection` block from the correlator and an `advisory` block from
+the dispatcher, each naming its `provenance`. The advisory thresholds were not
+recorded at all before, which meant the record could not explain the level it
+had assigned; they are now included.
+
+A message with no `detection` block predates this change and cannot be recovered
+from. Substituting local config is reasonable; doing it silently is not, so the
+substitution is recorded as `provenance: dispatcher_config_fallback`.
+
+`DEMO.md` now restarts all four units rather than two. The audit half of that
+skew is fixed by carrying the values, but the console still reads thresholds
+from the API's own process, and a dashboard screenshot describing a threshold
+the pipeline is not applying is worse than no screenshot.
+
+**Note on the committed evidence.** The six audit records in
+`docs/evidence/audit/` predate this and carry the old single `thresholds` block.
+Their values are correct, because all four processes were running the same
+`.env` at capture. Anything captured later will look different, and
+`docs/evidence/README.md` says so rather than leaving a reader to find the
+discrepancy.
+
+**Prevention:** a record of why something happened must be assembled by the
+process that did it, or carry the evidence forward explicitly. Re-deriving it
+downstream produces a record that is right exactly as long as nothing diverges,
+and provenance that is only conditionally true is not provenance.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

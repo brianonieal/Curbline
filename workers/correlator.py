@@ -141,6 +141,17 @@ def maybe_cluster() -> None:
             "hull_geojson": row["hull_geojson"],
             "alert_id": row["alert_id"],
             "detected_at": time.time(),
+            # The parameters this cluster was actually produced with, carried
+            # rather than re-read downstream. The dispatcher writes them into
+            # the immutable audit record, and it used to read them from its own
+            # config, which is a different process that can be restarted
+            # separately and hold different values. See E-027.
+            "detection": {
+                "depth_threshold_cm": config.DEPTH_THRESHOLD_CM,
+                "cluster_eps_ft": config.CLUSTER_EPS_FT,
+                "cluster_min_sensors": config.CLUSTER_MIN_SENSORS,
+                "reading_window_mins": config.READING_WINDOW_MINS,
+            },
         })
 
     # read_stats(), not STATS. The local dict is a delta that aws.consume()

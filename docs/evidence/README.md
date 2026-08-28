@@ -17,6 +17,16 @@ the system produced, it is checkable against `sql/schema.sql` and
 `workers/dispatcher.py`, and it satisfies the `DEMO.md` item calling for an
 audit object opened to show the recorded thresholds.
 
+**Record format changed after these were captured.** These six carry a single
+`thresholds` block. Records written from 2026-08-28 onward carry `detection` and
+`advisory` blocks instead, each naming the process that owns it. The reason is
+E-027: the old block read all four detection parameters from the dispatcher's
+config, while the clustering that produced the zone ran in the correlator with
+its own copy. The values in these six are correct, because all four processes
+were running the same `.env`, but the record was asserting a provenance it did
+not have. Anything captured in a later session will look different from these,
+and that is the fix rather than a discrepancy.
+
 Provenance: the sensor readings that produced these were synthetic, replayed
 from `data/replay.example.json`. Everything downstream of that injection point,
 including these records, was produced by the live stack. See report limitation 9.

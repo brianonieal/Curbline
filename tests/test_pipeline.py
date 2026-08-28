@@ -497,6 +497,71 @@ class TestUSGSBaselinePersistence:
             assert src.resolve_baseline("01300000") == 3.0
 
 
+class TestAuditProvenance:
+    """
+    Limitation 12, now E-027. The S3 audit record exists to say why a decision
+    was made. It named the four detection parameters by reading the
+    *dispatcher's* config, while the clustering that produced the zone ran in
+    the *correlator* with its own copy. All four processes read the same .env so
+    they agree at rest, and diverge the moment one is restarted alone, which is
+    the procedure DEMO.md itself documents.
+
+    For the one artifact whose entire purpose is provenance, plausible and wrong
+    is worse than absent.
+    """
+
+    def test_the_correlator_states_the_parameters_it_clustered_with(self):
+        from workers import correlator
+        from curbline import config
+        sent = []
+        row = {"sensor_ids": ["a", "b"], "sensor_count": 2,
+               "max_depth_cm": 12.0, "hull_geojson": "{}", "alert_id": None}
+        with mock.patch.object(correlator.db, "current_clusters",
+                               return_value=[row]), \
+             mock.patch.object(correlator.cache, "read_stats",
+                               return_value={"hits": 0, "misses": 0, "errors": 0}), \
+             mock.patch.object(correlator.aws, "send",
+                               side_effect=lambda q, b: sent.append(b)):
+            correlator._last_cluster_run = 0.0
+            correlator.maybe_cluster()
+
+        assert len(sent) == 1
+        d = sent[0]["detection"]
+        assert d["depth_threshold_cm"] == config.DEPTH_THRESHOLD_CM
+        assert d["cluster_eps_ft"] == config.CLUSTER_EPS_FT
+        assert d["cluster_min_sensors"] == config.CLUSTER_MIN_SENSORS
+        assert d["reading_window_mins"] == config.READING_WINDOW_MINS
+
+    def test_the_audit_records_the_producers_parameters_not_its_own(self):
+        """
+        The assertion that matters. The message carries a threshold the
+        dispatcher's own config does not have; the record must show the
+        message's value, because that is what actually produced the cluster.
+        """
+        from workers.dispatcher import audit_detection
+        body = {"detection": {"depth_threshold_cm": 999.0,
+                              "cluster_eps_ft": 111.0,
+                              "cluster_min_sensors": 7,
+                              "reading_window_mins": 3}}
+        got = audit_detection(body)
+        assert got["depth_threshold_cm"] == 999.0
+        assert got["provenance"] == "correlator"
+
+    def test_a_message_without_parameters_discloses_the_substitution(self):
+        """
+        An in-flight message published before this existed. Falling back to the
+        dispatcher's config is reasonable; doing it silently is not, because the
+        record would then assert a provenance it does not have.
+        """
+        from workers.dispatcher import audit_detection
+        from curbline import config
+        got = audit_detection({})
+        assert got["depth_threshold_cm"] == config.DEPTH_THRESHOLD_CM
+        assert got["provenance"] == "dispatcher_config_fallback", (
+            "a substituted value must say it was substituted"
+        )
+
+
 class TestHealthVerdict:
     """E-023: /api/health returned ok with every graded component stopped."""
 
