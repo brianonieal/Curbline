@@ -323,6 +323,33 @@ something the code could do itself is a defect, not documentation.
 
 ---
 
+## E-015 — Services survive a reboot holding a database that no longer exists
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** one confusing pool timeout on an otherwise clean bootstrap
+
+**Symptom:** `bootstrap.sh` completes, `provision.py` reports every service
+created, and `curbline-api` is `active (running)` while logging
+`psycopg_pool.PoolTimeout: couldn't get a connection`. Nothing looks broken; the
+unit has been up longer than the database has existed.
+
+**Root cause:** the four units are `enabled`, so systemd starts them at boot
+against whatever `.env` is on disk. After a stop/start cycle following a
+teardown, that file names an RDS endpoint that was deleted. `bootstrap.sh` then
+finished with `systemctl enable --now`, and `--now` starts a unit that is not
+running but is a no-op on one that is. `provision.py` rewrote `.env` correctly;
+no process re-read it.
+
+**Fix:** `bootstrap.sh` now runs `systemctl enable` and `systemctl restart` as
+separate commands. Restart is unconditional, so a re-run always reloads
+configuration.
+
+**Prevention:** `--now` is not "apply this". Any provisioning step that rewrites
+configuration has to restart the readers explicitly, because a long-running
+process holds the values it read at startup and no amount of correctness in the
+file reaches it. The tell is a unit whose uptime predates the resource it
+depends on.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

@@ -43,7 +43,12 @@ PGPASSWORD="$CURBLINE_DB_PASSWORD" psql -P pager=off \
 
 sudo cp systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now curbline-collector curbline-correlator \
-                            curbline-dispatcher curbline-api
+# enable, then restart explicitly. "enable --now" only starts a unit that is
+# not already running, and these units are enabled, so after a reboot systemd
+# has already started them against whatever .env was on disk at boot time.
+# provision.py rewrites .env with new endpoints on every run, so without the
+# restart the workers keep a database host that no longer exists. See E-015.
+sudo systemctl enable curbline-collector curbline-correlator curbline-dispatcher curbline-api
+sudo systemctl restart curbline-collector curbline-correlator curbline-dispatcher curbline-api
 
 systemctl --no-pager status 'curbline-*'
