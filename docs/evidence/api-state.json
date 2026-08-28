@@ -1,0 +1,30 @@
+{
+  "counts": {
+    "sensors": 5,
+    "readings": 1220,
+    "open_zones": 3,
+    "advisories": 3,
+    "active_alerts": 0
+  },
+  "pipeline": {
+    "queues": {
+      "ingest": {
+        "waiting": 0,
+        "in_flight": 0
+      },
+      "zones": {
+        "waiting": 0,
+        "in_flight": 0
+      }
+    },
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "errors": 0,
+      "hit_rate": null,
+      "reachable": true
+    },
+    "database": true,
+    "source": "replay"
+  }
+}
