@@ -161,6 +161,32 @@ untestable from the instance: verify it from the browser, not with curl on EC2.
 
 ---
 
+## E-009 — `bootstrap.sh` dies on apt before provisioning anything
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** one failed bootstrap run, nothing billable created
+
+**Symptom:** `./infra/bootstrap.sh` on a fresh Ubuntu 24.04 instance stops at
+`E: Package 'awscli' has no installation candidate`. Nothing after the apt line
+runs.
+
+**Root cause:** Ubuntu 24.04 (noble) dropped `awscli` from its archive. The v1
+CLI it used to ship was stale, and AWS distributes v2 itself rather than through
+distribution packages. The apt line was written against an earlier Ubuntu where
+the package still existed.
+
+**Fix:** `bootstrap.sh` drops `awscli` from the apt list and installs CLI v2
+from `awscliv2.zip`, guarded by `command -v aws` so a re-run is cheap. The
+archive name is built from `uname -m`, which matches AWS naming for x86_64 and
+aarch64 both.
+
+**Prevention:** `set -euo pipefail` did its job. The script stopped before
+`provision.py` ran, so no RDS or ElastiCache instance existed and there was no
+half-built stack to tear down. A bootstrap that fails for free is designed
+behavior, not luck. Also worth recording: nothing in the pipeline needs the CLI.
+provision.py, teardown.py and the workers are boto3 throughout, and the CLI is
+present only for DEMO.md and COSTS.md evidence capture.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

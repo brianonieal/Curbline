@@ -4,7 +4,19 @@ set -euo pipefail
 
 sudo apt-get update -y
 sudo apt-get install -y python3-venv python3-pip postgresql-client \
-                        redis-tools awscli git jq
+                        redis-tools git jq unzip curl
+
+# Ubuntu 24.04 removed awscli from its archive, so apt cannot install it here.
+# provision.py, teardown.py and the workers all use boto3 and never need the
+# CLI, but DEMO.md and COSTS.md shell out to it for evidence capture, so install
+# v2 from AWS directly. uname -m matches AWS archive naming exactly, which keeps
+# this correct if the instance type ever moves to Graviton.
+if ! command -v aws >/dev/null 2>&1; then
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+  unzip -q -o /tmp/awscliv2.zip -d /tmp
+  sudo /tmp/aws/install --update
+  rm -rf /tmp/aws /tmp/awscliv2.zip
+fi
 
 cd /home/ubuntu/curbline
 python3 -m venv .venv
