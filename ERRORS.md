@@ -384,6 +384,43 @@ flushing Redis was not. The bug it uncovered predates that command.
 
 ---
 
+## E-017 — No advisory has ever fired, in any run of this system
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** the entire notification path was dead and looked healthy
+
+**Symptom:** zones form, appear on the map and persist in the database, and the
+dispatcher logs `zone <id> forming, no advisory yet` on every cycle forever. The
+same zone_id recurs minutes apart and is still reported as forming. The advisory
+queue stays empty, nothing is written to S3 under `advisories/`, and SNS
+publishes nothing.
+
+**Root cause:** `handle` built its previous-state lookup as
+`{z["zone_id"]: z for z in db.open_zones()}`. `zones.zone_id` is a `UUID`
+column, so psycopg returns `uuid.UUID` objects as the keys, while `zone_id` from
+the SQS body is a string parsed from JSON. `UUID(x) == str(x)` is False, so the
+lookup never matched, `previous_state` was always `None`, `next_state` always
+returned `forming`, and the guard `if state == "forming": return` took the early
+exit every time.
+
+Nothing was closing zones and nothing was wrong with the lifecycle logic. The
+dictionary simply never found anything.
+
+**Fix:** the three queries that select `zone_id` from `zones` now cast it with
+`zone_id::text`, and the dispatcher keys and looks up with `str(...)` so a
+future query that forgets the cast cannot resurrect this.
+
+**Prevention:** the lifecycle was unit tested through `next_state`, which is a
+pure function over the state string and passed. The defect lived in how the
+argument was obtained, one line above the call. A pure function tested in
+isolation says nothing about whether its inputs are ever computed correctly, and
+this is the second time in two days that a correct decision was defeated by the
+plumbing feeding it (see E-014).
+
+Worth stating plainly in the report: the S3 audit write and the SNS publish, two
+of the three graded components' outputs, had never executed against a real
+account before this fix. Every prior demonstration showed zone detection only.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

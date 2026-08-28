@@ -160,9 +160,9 @@ def open_zones() -> list[dict[str, Any]]:
     with cursor() as cur:
         cur.execute(
             """
-            SELECT zone_id, sensor_ids, sensor_count, max_depth_cm, state,
-                   under_alert, alert_id, opened_at, updated_at,
-                   ST_AsGeoJSON(hull) AS hull_geojson
+            SELECT zone_id::text AS zone_id, sensor_ids, sensor_count,
+                   max_depth_cm, state, under_alert, alert_id, opened_at,
+                   updated_at, ST_AsGeoJSON(hull) AS hull_geojson
             FROM zones WHERE state <> 'closed'
             """
         )
@@ -233,7 +233,7 @@ def sensors_geojson() -> dict[str, Any]:
             FROM sensors s
             LEFT JOIN latest_readings lr USING (sensor_id)
             LEFT JOIN LATERAL (
-                SELECT zone_id FROM zones
+                SELECT zone_id::text AS zone_id FROM zones
                 WHERE state <> 'closed' AND s.sensor_id = ANY(sensor_ids)
                 LIMIT 1
             ) z ON TRUE
@@ -261,7 +261,7 @@ def zones_geojson() -> dict[str, Any]:
     with cursor() as cur:
         cur.execute(
             """
-            SELECT zone_id, ST_AsGeoJSON(hull)::json AS geometry,
+            SELECT zone_id::text AS zone_id, ST_AsGeoJSON(hull)::json AS geometry,
                    sensor_ids, sensor_count, max_depth_cm, state,
                    under_alert, alert_id, opened_at, updated_at
             FROM zones WHERE state <> 'closed'

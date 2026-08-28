@@ -97,8 +97,14 @@ def handle(body: dict[str, Any]) -> None:
     alert_id = body.get("alert_id")
     under_alert = alert_id is not None
 
-    existing = {z["zone_id"]: z for z in db.open_zones()}
-    previous = existing.get(zone_id)
+    # Key on str. zones.zone_id is a UUID column, so the database layer can
+    # return uuid.UUID while the queue body always carries a string. UUID(x) is
+    # never equal to str(x), so keying on the raw value finds nothing, every
+    # zone looks new, next_state returns "forming" forever and no advisory is
+    # ever sent. The SQL now casts, and this keeps the lookup correct even if a
+    # future query forgets to. See E-017.
+    existing = {str(z["zone_id"]): z for z in db.open_zones()}
+    previous = existing.get(str(zone_id))
     previous_state = previous["state"] if previous else None
 
     state = next_state(previous_state, body["sensor_count"])
