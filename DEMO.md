@@ -13,7 +13,9 @@ nothing. Find that out now, not tomorrow.
 ```bash
 # On a fresh Ubuntu EC2 instance with an IAM instance role attached
 git clone <repo> ~/curbline && cd ~/curbline
-AWS_REGION=us-east-1 ./infra/bootstrap.sh
+# CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine, not
+# from this instance. curl on the instance returns the instance. See E-008.
+AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=203.0.113.7/32 ./infra/bootstrap.sh
 ```
 
 **Block 1 is not finished until this succeeds:**

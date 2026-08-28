@@ -124,7 +124,9 @@ python3 -m pytest tests/ -q
 ./scripts/gate-check.sh v0.5.0
 
 # Provision (on EC2, with the instance role attached)
-AWS_REGION=us-east-1 ./infra/bootstrap.sh
+# CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine, not
+# from this instance. curl on the instance returns the instance. See E-008.
+AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=203.0.113.7/32 ./infra/bootstrap.sh
 
 # Service control
 sudo systemctl status 'curbline-*'

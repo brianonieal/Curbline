@@ -101,7 +101,9 @@ now rather than halfway through provisioning.
 
 ```bash
 git clone <repo> ~/curbline && cd ~/curbline
-AWS_REGION=us-east-1 ./infra/bootstrap.sh
+# CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine, not
+# from this instance. curl on the instance returns the instance. See E-008.
+AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=203.0.113.7/32 ./infra/bootstrap.sh
 ```
 
 `provision.py` opens tcp/22 and tcp/8000 to your current public address only.

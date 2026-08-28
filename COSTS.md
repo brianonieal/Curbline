@@ -1,9 +1,47 @@
 # COSTS
 
-Per the costs skill. Curbline runs on AWS free tier, so the number that matters
-is not dollars, it is **hours consumed against three separate 750-hour clocks**.
+Per the costs skill.
 
-**Account status:** free tier eligible, under 12 months (confirmed 2026-08-27).
+**Corrected 2026-08-28.** This file was written against the classic 12-month
+free tier and its three separate 750-hour clocks. That is not the plan this
+account is on. The console reports:
+
+> Credits remaining **$100.00 USD**. Days remaining **185** (Feb 28, 2027).
+> Credits cover your free plan costs. Your access to AWS services will end when
+> credits are depleted or free period ends.
+
+**Account status:** AWS Free Plan, account 477977196933, credit-based, not
+hour-based. One shared $100 pool, not three 750-hour clocks. The 750-hour
+framing below is retained for the per-service rates, which are still correct,
+but the allowance model it describes does not apply here.
+
+### What that changes
+
+The failure mode inverts. The old risk was burning an allowance that resets
+monthly. The new risk is drawing down a finite pool that has to last until
+2027-02-28, and on the Free Plan **service access ends when it hits zero**, which
+mid-gate would take out the submission rather than produce a bill.
+
+Actual burn, all three hourly services plus 20 GB of RDS storage:
+
+```
+EC2 t3.micro          $0.0104/hr
+RDS db.t3.micro       $0.017 /hr
+ElastiCache t3.micro  $0.017 /hr
+RDS 20 GB gp3         $0.0032/hr
+                      ---------
+                      $0.0476/hr  = ~$1.14/day  = ~$35/month
+```
+
+Phase A's submission window, everything up continuously for four days: **about
+$4.60, under 5% of the pool.** Credits would survive roughly 88 continuous days.
+
+So teardown stays a gate exit criterion, and the panic level is calibrated: you
+have roughly 80x headroom for the submission itself. The thing to actually avoid
+is leaving the stack up for weeks after submitting.
+
+**Do not use the console's "Upgrade plan" button.** Staying on the Free Plan is a
+hard spend ceiling, which for coursework is a feature.
 
 ---
 

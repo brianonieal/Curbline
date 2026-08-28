@@ -411,7 +411,16 @@ def main() -> None:
 
     # Without this the console is unreachable from a browser, which is the
     # kind of thing you discover after everything else already works.
-    admin = args.admin_cidr or my_public_cidr()
+    # my_public_cidr() resolves whichever host runs this. Under bootstrap.sh
+    # that is the EC2 instance, not the operator. See E-008.
+    admin = args.admin_cidr
+    if admin is None:
+        if this_instance_id() is not None:
+            log("WARNING: no --admin-cidr and this is an EC2 instance. The "
+                "autodetected address is this instance's own, so tcp/8000 "
+                "would open to nobody with a browser. Re-run with "
+                "--admin-cidr <your-public-ip>/32.")
+        admin = my_public_cidr()
     if admin:
         allow_from_cidr(ec2, app_sg, 22, admin, "ssh")
         allow_from_cidr(ec2, app_sg, 8000, admin, "curbline console")

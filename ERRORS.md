@@ -136,6 +136,31 @@ Postgres takes numeric.
 ## Template
 
 ```
+## E-008 — Console still unreachable after E-004 was "fixed"
+**Found:** 2026-08-28, pre-v0.5.0 | **Status:** FIXED | **Cost:** would have been the whole v0.5.0 exit criteria
+
+**Symptom:** `provision.py` reports `opened tcp/8000 on sg-... to x.x.x.x/32`,
+the rule is visibly present in the console, and the browser still times out.
+
+**Root cause:** `my_public_cidr()` resolves the public address of whichever host
+executes it, via `checkip.amazonaws.com`. `bootstrap.sh` runs `provision.py`
+**on the EC2 instance**, so the address it resolves is the instance's own. The
+rule opens tcp/22 and tcp/8000 from the instance to itself. E-004 opened the
+ports correctly and pointed them at the wrong address, which is why the log line
+looks right.
+
+**Fix:** `bootstrap.sh` now requires `CURBLINE_ADMIN_CIDR` and forwards it as
+`--admin-cidr`. `provision.py` warns when it is on an EC2 instance with no
+`--admin-cidr` given. Every documented invocation now passes a literal address.
+
+**Prevention:** an address-detection helper answers "who am I," never "who is the
+operator." The two are the same only when the code runs on the operator's
+machine. `provision.py` is designed to run on the instance, so they never are.
+Note that this makes the v0.5.0 exit criterion "reachable from Brian's browser"
+untestable from the instance: verify it from the browser, not with curl on EC2.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
