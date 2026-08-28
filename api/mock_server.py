@@ -25,6 +25,7 @@ import asyncio
 import contextlib
 import json
 import math
+import os
 import pathlib
 import random
 import time
@@ -39,6 +40,16 @@ WEB_DIR = pathlib.Path(__file__).resolve().parent.parent / "web"
 # One storm cycle, in seconds. Short enough to demo, long enough to read.
 CYCLE = 180.0
 START = time.time()
+
+# The dead-letter indicator is hidden while zero, so exercising it needs a way
+# to force it without a real poison message.
+MOCK_DLQ = int(os.environ.get("CURBLINE_MOCK_DLQ", "0"))
+
+# 8000 stays the default: the deployed console is reached on it and the security
+# group opens it. Overridable because a developer machine may already have 8000
+# taken or firewalled, and this server exists precisely so frontend work does
+# not have to wait on anything.
+PORT = int(os.environ.get("CURBLINE_MOCK_PORT", "8000"))
 
 THRESHOLDS = {
     "detect_cm": 5.0, "advisory_cm": 10.0,
@@ -208,6 +219,12 @@ def build_state() -> dict:
                 "ingest": {"waiting": random.randint(0, 6),
                            "in_flight": random.randint(0, 2)},
                 "zones": {"waiting": random.randint(0, 2), "in_flight": 0},
+                # Always zero here. The dead-letter indicator is meant to be
+                # invisible in normal operation, and a mock that randomly
+                # tripped it would teach the wrong thing about the real one.
+                # Set CURBLINE_MOCK_DLQ=1 to exercise the visible state.
+                "ingest-dlq": {"waiting": MOCK_DLQ, "in_flight": 0},
+                "zones-dlq": {"waiting": 0, "in_flight": 0},
             },
             "cache": {
                 "hits": hits, "misses": misses, "errors": 0,
@@ -237,7 +254,7 @@ async def broadcaster() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     task = asyncio.create_task(broadcaster())
-    print(f"mock console on http://localhost:8000  (storm cycle {CYCLE:.0f}s)")
+    print(f"mock console on http://localhost:{PORT}  (storm cycle {CYCLE:.0f}s)")
     yield
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
@@ -254,8 +271,13 @@ async def state() -> JSONResponse:
 
 @app.get("/api/health")
 async def health() -> JSONResponse:
-    return JSONResponse({"status": "ok", "database": True,
-                         "cache": True, "source": "mock"})
+    # workers mirrors the real endpoint's shape. There are no worker processes
+    # behind this server, so reporting them live would be a lie; None is the
+    # "unknown" state the real one uses when it cannot get an answer.
+    return JSONResponse({"status": "ok", "database": True, "cache": True,
+                         "workers": {"collector": None, "correlator": None,
+                                     "dispatcher": None},
+                         "source": "mock"})
 
 
 @app.websocket("/ws")
@@ -278,4 +300,4 @@ if WEB_DIR.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

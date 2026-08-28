@@ -651,7 +651,15 @@ and never wrote them to `.env`, so nothing downstream could reach them.
 
 **Fix:** `provision.py` writes `CURBLINE_QUEUE_*_DLQ`, config reads them as
 optional (a stack provisioned before this still runs, it just cannot report DLQ
-depth), and `queue_depths()` queries and returns them.
+depth), `queue_depths()` queries and returns them, and the console shows them.
+
+The display half matters as much as the data half, and was nearly left out. The
+symptom was "invisible on the dashboard", so returning the number in a payload
+nobody renders would have closed the entry while leaving the symptom intact. The
+indicator is hidden while zero rather than showing a permanent "0", because a
+number that is always zero trains the eye to skip it. Absent keys, from a stack
+provisioned before the URLs were written, keep it hidden too: unknown is not the
+same as clean, and claiming a clean queue would be worse than saying nothing.
 
 **Prevention:** `_ = x` is a silenced linter, not a decision. It was hiding an
 unfinished feature that the docstring above it claimed was finished.

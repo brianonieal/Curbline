@@ -87,6 +87,12 @@
     <i class="foot-sep"></i>
     <span>Ingest queue <b class="mono" id="q-ingest">&mdash;</b></span>
     <span>Zones queue <b class="mono" id="q-zones">&mdash;</b></span>
+    <!-- Hidden while zero, which is its normal state. A dead-letter queue with
+         anything in it means the pipeline gave up on a message after five
+         receives, and that is the one queue depth that is never routine. -->
+    <span id="q-dlq-wrap" hidden>
+      <i class="pip warn"></i>Dead-lettered <b class="mono" id="q-dlq">&mdash;</b>
+    </span>
     <i class="foot-sep"></i>
     <span><i class="pip" id="pip-db"></i>PostGIS</span>
     <span><i class="pip" id="pip-cache"></i>Cache <b class="mono" id="c-rate">&mdash;</b></span>

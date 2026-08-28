@@ -362,6 +362,18 @@ function paintChrome(state) {
   $('q-zones').textContent =
     `${p.queues.zones.waiting}+${p.queues.zones.in_flight}`;
 
+  // Dead-letter depth is shown only when it is non-zero. A permanent "0" next
+  // to the working queues would train the eye to skip it, which defeats the
+  // point of surfacing it at all. Absent keys mean a stack provisioned before
+  // the DLQ URLs were written to .env; that is unknown, not zero, so the row
+  // stays hidden rather than claiming a clean queue. See E-024.
+  const dlqCounts = ['ingest-dlq', 'zones-dlq']
+    .map((k) => p.queues[k])
+    .filter((q) => q && q.waiting > 0);
+  const dlqTotal = dlqCounts.reduce((n, q) => n + q.waiting, 0);
+  $('q-dlq-wrap').hidden = dlqTotal === 0;
+  if (dlqTotal > 0) $('q-dlq').textContent = String(dlqTotal);
+
   $('pip-db').className = `pip ${p.database ? 'up' : 'down'}`;
   // Cache down is degraded, never down: every read falls through to Postgres.
   $('pip-cache').className = `pip ${p.cache.reachable ? 'up' : 'warn'}`;
