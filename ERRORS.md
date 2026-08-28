@@ -187,6 +187,31 @@ present only for DEMO.md and COSTS.md evidence capture.
 
 ---
 
+## E-010 — Policy grants an action name that does not exist
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** one provision run, stopped after the bucket was created
+
+**Symptom:** `provision.py` logs `created bucket curbline-audit-...`, then dies
+with `AccessDenied` on `PutPublicAccessBlock`, reporting that no identity-based
+policy allows `s3:PutBucketPublicAccessBlock`.
+
+**Root cause:** the IAM action is `s3:PutBucketPublicAccessBlock`. The boto3
+method and the wire operation are both `PutPublicAccessBlock`, without `Bucket`.
+`iam-policy.json` granted the operation name, which is not an action. IAM does
+not validate action names in a policy document, so `put-role-policy` succeeded
+and the grant authorized nothing.
+
+**Fix:** `iam-policy.json` grants `s3:PutBucketPublicAccessBlock`. Re-applied
+with `aws iam put-role-policy`, verified by re-running `provision.py` past the
+bucket step.
+
+**Prevention:** a policy that applied cleanly proves nothing about whether its
+actions exist. Read the action name from the service authorization reference,
+not from the SDK method. Every other call in `provision.py` and `teardown.py`
+was audited against this policy at the same time and the rest are correct; no
+tags are set anywhere, so no tagging actions are needed.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
