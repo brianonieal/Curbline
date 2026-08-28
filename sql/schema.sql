@@ -126,6 +126,13 @@ ORDER BY r.sensor_id, r.observed_at DESC;
 --                    one wet sensor is a reading, two adjacent wet sensors
 --                    are a flooding street.
 -- ---------------------------------------------------------------------------
+-- WARNING on the defaults below. They are FloodNet's calibration. The workers
+-- never use them, db.py passes all four explicitly from config, but a hand-run
+-- `SELECT * FROM current_clusters();` gets 5.0 cm regardless of what
+-- CURBLINE_SOURCE is set to. On a usgs stack, where detection starts at 60,
+-- that returns clusters the running system would never form. Pass the four
+-- arguments explicitly when capturing evidence, and say which source they came
+-- from. See E-014 and E-025.
 CREATE OR REPLACE FUNCTION current_clusters(
     p_threshold_cm NUMERIC DEFAULT 5.0,
     p_window_mins  INT     DEFAULT 15,

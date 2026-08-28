@@ -381,7 +381,13 @@ def recent_advisories(limit: int = 40) -> list[dict[str, Any]]:
     with cursor() as cur:
         cur.execute(
             """
-            SELECT a.advisory_id, a.zone_id, a.level, a.message, a.issued_at,
+            -- Cast both UUIDs, like every other zone_id query since E-017.
+            -- This one is currently defused by str() at the call site, which is
+            -- exactly the kind of protection someone deletes as redundant. The
+            -- cast policy is uniform so it cannot be reintroduced by tidying.
+            SELECT a.advisory_id::text AS advisory_id,
+                   a.zone_id::text AS zone_id,
+                   a.level, a.message, a.issued_at,
                    a.audit_key, z.state, z.sensor_count, z.max_depth_cm,
                    z.under_alert
             FROM advisories a

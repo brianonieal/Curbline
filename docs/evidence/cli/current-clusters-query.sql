@@ -6,9 +6,21 @@
 -- POINT, both of which violate geometry(Polygon, 4326) and render invisibly.
 -- current_clusters() buffers by 492 ft to force a polygon, so every row this
 -- returns must report ST_Polygon. Anything else means the buffer regressed.
+--
+-- The four arguments are passed explicitly and are the `replay` calibration,
+-- which is what CURBLINE_SOURCE was set to for this capture. The function's own
+-- defaults are FloodNet's, so a no-argument call would have answered at 5.0 cm
+-- whatever the running system was configured for. That happened to be the same
+-- number here, and would not be on a usgs stack. An evidence query has to state
+-- its calibration rather than inherit one. See E-025.
 SELECT cluster_id,
        sensor_ids,
        sensor_count,
        max_depth_cm,
        ST_GeometryType(hull)
-FROM current_clusters();
+FROM current_clusters(
+    p_threshold_cm := 5.0,     -- replay/floodnet detection floor
+    p_window_mins  := 15,
+    p_eps_ft       := 1640,
+    p_minpoints    := 2
+);

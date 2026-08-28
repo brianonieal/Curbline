@@ -658,6 +658,41 @@ unfinished feature that the docstring above it claimed was finished.
 
 ---
 
+## E-025 - A hand-run current_clusters() answers at FloodNet calibration on any stack
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 (documented, defaults retained) | **Cost:** one committed evidence artifact was ambiguous
+
+**Symptom:** `SELECT * FROM current_clusters();` returns clusters at a 5.0 cm
+detection floor regardless of `CURBLINE_SOURCE`. On a `usgs` stack, where the
+running system does not detect below 60 cm, the query reports zones the pipeline
+would never form.
+
+**Root cause:** the function declares `p_threshold_cm NUMERIC DEFAULT 5.0` and
+`p_eps_ft NUMERIC DEFAULT 1640`, FloodNet's calibration, baked into the schema.
+The application never touches them, `db.py` passes all four arguments
+explicitly, so this is invisible in normal operation. It surfaces only when a
+human runs the function by hand, which is precisely what evidence capture is.
+D-005 says thresholds move with the source; the SQL layer never implemented it.
+E-014 is the same defect in the dispatcher and E-022 is the same defect in the
+frontend.
+
+`docs/evidence/cli/current-clusters-query.sql`, committed as evidence, called it
+with no arguments. That capture is still correct, because `CURBLINE_SOURCE` was
+`replay` at the time and replay detects at 5.0 as well, but it was correct by
+coincidence rather than by construction and nothing in the file said so.
+
+**Fix:** the defaults are kept, because six documented call sites use the
+no-argument form and breaking them during a time-boxed capture session trades a
+real hazard for a worse one. Instead the hazard is made loud: a warning comment
+above the function saying a no-argument call is FloodNet calibration whatever
+the source, and the committed evidence query now passes all four values
+explicitly with the source named in a comment.
+
+**Prevention:** an evidence artifact must state its own calibration rather than
+inherit one. "It was right when I ran it" is not reproducible; "these are the
+parameters and this is the source" is.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
