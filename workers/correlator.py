@@ -22,6 +22,8 @@ import time
 import uuid
 from typing import Any
 
+from psycopg.errors import ForeignKeyViolation
+
 from curbline import aws, cache, config, db
 
 logging.basicConfig(
@@ -55,6 +57,13 @@ def stable_zone_id(sensor_ids: list[str]) -> str:
     return str(uuid.UUID(bytes=digest[:16]))
 
 
+def _ensure_sensor(body: dict[str, Any]) -> None:
+    """Write the sensor row and warm the cache entry that describes it."""
+    db.upsert_sensor(body["sensor_id"], body["name"], body["lon"], body["lat"])
+    cache.invalidate_sensor(body["sensor_id"])
+    cache.sensor(body["sensor_id"])
+
+
 def handle_reading(body: dict[str, Any]) -> None:
     sensor_id = body["sensor_id"]
 
@@ -62,17 +71,36 @@ def handle_reading(body: dict[str, Any]) -> None:
     # changes almost never, which is what makes it worth caching.
     known = cache.sensor(sensor_id)
     if known is None:
-        db.upsert_sensor(sensor_id, body["name"], body["lon"], body["lat"])
-        cache.invalidate_sensor(sensor_id)
-        cache.sensor(sensor_id)
+        _ensure_sensor(body)
 
-    claimed = db.claim_reading(
-        ingest_id=body["ingest_id"],
-        sensor_id=sensor_id,
-        observed_at=body["observed_at"],
-        depth_cm=body["depth_cm"],
-        source=body["source"],
-    )
+    try:
+        claimed = db.claim_reading(
+            ingest_id=body["ingest_id"],
+            sensor_id=sensor_id,
+            observed_at=body["observed_at"],
+            depth_cm=body["depth_cm"],
+            source=body["source"],
+        )
+    except ForeignKeyViolation:
+        # The cache reported this sensor as known and Postgres disagrees. The
+        # cache is a copy of the row, never proof the row exists, and the two
+        # diverge for ordinary reasons: a restored database, a manual delete, a
+        # cache that outlived the table it describes. Treating the cache as an
+        # existence oracle turns that divergence into a message that fails on
+        # every redelivery until it reaches the dead-letter queue. Repair the
+        # row, then retry once. See E-016.
+        log.warning("cache claimed sensor %s exists, database disagrees; "
+                    "repairing", sensor_id)
+        cache.invalidate_sensor(sensor_id)
+        _ensure_sensor(body)
+        claimed = db.claim_reading(
+            ingest_id=body["ingest_id"],
+            sensor_id=sensor_id,
+            observed_at=body["observed_at"],
+            depth_cm=body["depth_cm"],
+            source=body["source"],
+        )
+
     if not claimed:
         # Duplicate delivery. Expected under at-least-once, not an error.
         log.debug("duplicate reading %s skipped", body["ingest_id"])

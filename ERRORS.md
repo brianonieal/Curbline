@@ -350,6 +350,40 @@ depends on.
 
 ---
 
+## E-016 — Cache used as proof a database row exists
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** a stalled pipeline that looked like a replay-source problem
+
+**Symptom:** the collector logs `published 5 readings from source=replay` every
+minute, the queue shows messages in flight, and `sensors`, `readings` and
+`zones` all hold zero rows. The correlator logs
+`ForeignKeyViolation: readings_sensor_id_fkey`, `Key (sensor_id)=(demo:q4) is
+not present in table "sensors"`.
+
+**Root cause:** `handle_reading` upserted the sensor only when the Redis lookup
+missed. Clearing the `sensors` table without clearing Redis left the cache
+reporting sensors that no longer existed, so the upsert was skipped and every
+insert violated the foreign key. Because SQS redelivers, the same messages
+failed continuously rather than once.
+
+The cache is a copy of a row. It was being read as evidence the row exists.
+Those diverge for ordinary reasons: a restored database, a manual delete, a
+cache outliving the table it describes.
+
+**Fix:** `handle_reading` catches `ForeignKeyViolation`, invalidates the cache
+entry, rewrites the sensor and retries the insert once. The cache still saves a
+round trip on the common path; it no longer decides whether a write can succeed.
+
+**Prevention:** a cache answers "what did this row look like," never "does this
+row exist." Any write guarded by a cache hit needs a path that survives the
+guard being wrong, because at-least-once delivery turns a single wrong answer
+into an unbounded retry loop rather than one failure.
+
+**Note:** the operator error that exposed this was mine. Clearing `sensors` to
+separate replay data from USGS data was correct in intent; doing it without
+flushing Redis was not. The bug it uncovered predates that command.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
