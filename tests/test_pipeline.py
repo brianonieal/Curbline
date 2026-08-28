@@ -359,3 +359,69 @@ class TestSourceCalibration:
     def test_unknown_source_falls_back_to_the_sensitive_calibration(self):
         from curbline.config import thresholds_for
         assert thresholds_for("nonesuch") == thresholds_for("floodnet")
+
+
+class TestZoneLookupTypes:
+    """E-017: psycopg returns uuid.UUID for a UUID column, the queue body carries
+    a string, and UUID(x) != str(x). The existing TestAuditOrdering mocks
+    open_zones with a string zone_id, which is exactly why it passed while no
+    advisory had ever fired in production."""
+
+    def test_uuid_keyed_open_zones_still_promotes_to_active(self):
+        import uuid as _uuid
+        from workers import dispatcher
+
+        zid = "33333333-3333-3333-3333-333333333333"
+        body = {
+            "zone_id": zid,
+            "sensor_ids": ["a", "b"], "sensor_count": 2,
+            "max_depth_cm": 25.0, "alert_id": None,
+            "hull_geojson": '{"type":"Polygon","coordinates":[]}',
+        }
+        written = {}
+
+        with mock.patch.object(dispatcher.db, "open_zones",
+                               return_value=[{
+                                   "zone_id": _uuid.UUID(zid),
+                                   "state": "forming",
+                                   "under_alert": False,
+                               }]),              mock.patch.object(dispatcher.db, "upsert_zone",
+                               side_effect=lambda **k: written.update(k)),              mock.patch.object(dispatcher.db, "record_advisory",
+                               return_value="adv-1"),              mock.patch.object(dispatcher.aws, "write_audit",
+                               return_value="key"),              mock.patch.object(dispatcher.aws, "publish", return_value="msg"):
+            dispatcher.handle(body)
+
+        assert written["state"] == "active", (
+            "a zone already forming must promote to active; keying the lookup "
+            "on the raw UUID finds nothing and leaves it forming forever"
+        )
+
+
+class TestSensorCacheDivergence:
+    """E-016: a cache hit describes a row, it does not prove the row exists."""
+
+    def test_foreign_key_violation_repairs_the_sensor_and_retries(self):
+        from psycopg.errors import ForeignKeyViolation
+        from workers import correlator
+
+        body = {
+            "ingest_id": "ing-1", "sensor_id": "demo:q1", "name": "Q1",
+            "lon": -73.79, "lat": 40.70,
+            "observed_at": "2026-08-28T00:00:00Z",
+            "depth_cm": 9.0, "source": "replay",
+        }
+        attempts = []
+
+        def claim(**kwargs):
+            attempts.append("claim")
+            if len(attempts) == 1:
+                raise ForeignKeyViolation("readings_sensor_id_fkey")
+            return True
+
+        with mock.patch.object(correlator.cache, "sensor",
+                               return_value={"sensor_id": "demo:q1"}),              mock.patch.object(correlator.cache, "invalidate_sensor"),              mock.patch.object(correlator.db, "upsert_sensor") as upsert,              mock.patch.object(correlator.db, "claim_reading", side_effect=claim):
+            correlator.handle_reading(body)
+
+        assert upsert.called, "the sensor row must be rewritten after the violation"
+        assert attempts == ["claim", "claim"], "the insert must be retried exactly once"
+

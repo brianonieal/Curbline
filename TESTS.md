@@ -4,7 +4,7 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 29 passing, 0 failing.**
+**Current: 31 passing, 0 failing.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
@@ -29,6 +29,8 @@ documents for `scripts/gate-check.sh`.
 | `TestAuditOrdering` | 2 | S3 write precedes SNS publish; failed audit blocks the notification |
 | `TestAlertFiltering` | 2 | Null-geometry alerts survive ingest; non-flood events dropped |
 | `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and that an unrecognised source falls back to the sensitive calibration |
+| `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone_id from the database still matches the string in the queue body, so a forming zone promotes |
+| `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries the insert once |
 
 ## Integration fixture — `tests/fixture_clusters.sql`
 
@@ -55,8 +57,10 @@ psql -d curbline_test -c "SELECT * FROM current_clusters();"
 
 Not covered by automated tests:
 
-- `infra/provision.py` and `infra/teardown.py`. Never executed against a real
-  account. The riskiest untested code in the repo.
+- `infra/provision.py` and `infra/teardown.py`. Executed against a real account
+  for the first time on 2026-08-28 and still carry no automated test. They are
+  the riskiest code in the repo and five of the nine v0.5.0 defects were in them
+  or in the policy they depend on.
 - `api/server.py` WebSocket broadcast fan-out.
 - The frontend. Structurally validated (`node --check`, HTML parse, id contract,
   CSS variable coverage) but never rendered in a browser.
