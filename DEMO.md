@@ -134,9 +134,13 @@ capturing rather than hiding.
 
 **Confirm green before continuing.** The remaining captures assume a healthy
 cache, and a status bar still showing amber will contradict the status bar
-screenshot later in the set. Note that the hit rate itself reads null even on a
-healthy cache: that is E-019, a counter that lives in the correlator with no
-transport to the API, not a symptom of this test.
+screenshot later in the set.
+
+**The hit rate needs the correlator to have processed readings since the flush,
+not merely to be running.** Counters are published to Redis from the worker loop
+between batches (E-019), so a status bar captured seconds after a restart shows
+`n/a` correctly rather than a number. Let the pipeline run a minute before
+capturing.
 
 ---
 
@@ -170,9 +174,9 @@ resolves without renaming anything afterwards.
 - [ ] `e2e-console-baseline.png` Console with zero zones (baseline)
 - [ ] `e2e-console-active-zone.png` Console with an active zone drawn, rail filled, advisory queued
 - [ ] `e2e-console-depth-change.png` Same zone before and after, showing depth change on the rail
-- [ ] `e2e-console-status-bar.png` Status bar showing queue depth and PostGIS up. The
-      hit rate reads null by construction (E-019); capture it as it is rather than
-      waiting for a number that cannot arrive.
+- [ ] `e2e-console-status-bar.png` Status bar showing queue depth, a non-zero cache
+      hit rate, and PostGIS up. If it reads `n/a`, the correlator has not flushed
+      counters yet; wait a poll interval rather than capturing the empty state.
 - [ ] `e2e-api-health.png` `curl /api/health` output
 - [ ] **Expected unmet:** a zone with `NWS confirmed` next to one without. This needs
       an active NWS flood alert intersecting a zone footprint during the capture
@@ -213,7 +217,7 @@ taken them.
 - [ ] `advisories` rows showing `sns_message_id` and `audit_key`
 - [ ] Duplicate-delivery replay: same `ingest_id`, one row before and after
 - [ ] Console: zero zones, active zone, before and after depth change
-- [ ] Console: status bar, hit rate null per E-019 and captured as such
+- [ ] Console: status bar showing a non-zero cache hit rate
 - [ ] SNS email, or the written reason it could not be captured
 
 **Anything unobtainable is recorded, not silently dropped.** Put the reason in

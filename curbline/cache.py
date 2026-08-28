@@ -21,9 +21,21 @@ log = logging.getLogger(__name__)
 
 _client: redis.Redis | None = None
 
-# Counters, exposed so the API can show cache effectiveness on the dashboard.
-# This is the concrete evidence for the report's claim about the cache layer.
+# Unflushed deltas for THIS process, not a total. Incremented on the hot path,
+# drained by flush_stats(). Reading this dict to answer "what is the hit rate"
+# is the E-019 defect: cache.sensor() is called only by the correlator, so the
+# API's copy is always zero and reported a plausible-looking wrong number.
+# Anything outside this module wants read_stats().
 STATS = {"hits": 0, "misses": 0, "errors": 0}
+
+# Where the aggregate lives. Redis is the natural home: the counters describe
+# the cache, every process already holds a connection, and INCRBY is atomic so
+# concurrent workers cannot lose each other's counts.
+_STATS_KEYS = {
+    "hits": "stats:cache:hits",
+    "misses": "stats:cache:misses",
+    "errors": "stats:cache:errors",
+}
 
 
 def client() -> redis.Redis:
@@ -96,6 +108,60 @@ def invalidate_sensor(sensor_id: str) -> None:
         client().delete(f"sensor:{sensor_id}")
     except redis.RedisError as exc:
         log.warning("cache invalidate failed for %s: %s", sensor_id, exc)
+
+
+def flush_stats() -> None:
+    """
+    Publish this process's unflushed counts so another process can read them.
+
+    Called from the worker loop between batches rather than from _get, because
+    the hot path should not pay a network roundtrip to measure itself. The cost
+    is that the dashboard trails real activity by up to one poll interval, which
+    for a status bar is not a cost at all.
+
+    On failure the deltas are kept. The flush target is the cache, so a failed
+    flush usually means the cache is down, which is exactly when the error count
+    is worth having. Dropping it here would under-report the incident that
+    produced it.
+    """
+    pending = {k: v for k, v in STATS.items() if v}
+    if not pending:
+        return
+    try:
+        c = client()
+        for name, delta in pending.items():
+            c.incrby(_STATS_KEYS[name], delta)
+    except redis.RedisError as exc:
+        log.warning("stats flush failed, retaining %s for the next attempt: %s",
+                    pending, exc)
+        return
+    for name in pending:
+        STATS[name] -= pending[name]
+
+
+def read_stats() -> dict[str, Any]:
+    """
+    The published aggregate across every process that has flushed.
+
+    hit_rate is None rather than 0.0 when nothing has been recorded or the cache
+    is unreachable. Those are unknowns, and a status bar showing 0% for an
+    unknown is the same class of quiet wrongness as E-019 itself.
+    """
+    try:
+        raw = client().mget([_STATS_KEYS["hits"],
+                             _STATS_KEYS["misses"],
+                             _STATS_KEYS["errors"]])
+    except redis.RedisError:
+        return {"hits": 0, "misses": 0, "errors": 0, "hit_rate": None}
+
+    hits, misses, errors = (int(v) if v is not None else 0 for v in raw)
+    total = hits + misses
+    return {
+        "hits": hits,
+        "misses": misses,
+        "errors": errors,
+        "hit_rate": round(hits / total, 3) if total else None,
+    }
 
 
 def healthy() -> bool:

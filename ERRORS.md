@@ -451,7 +451,7 @@ checked. This is the second false read on stack state in one day.
 ---
 
 ## E-019 - Dashboard cache hit rate is structurally always zero
-**Found:** 2026-08-28, v0.5.0 | **Status:** OPEN, known limitation | **Cost:** one v0.7.0 exit criterion that cannot be met as written
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED 2026-08-28 | **Cost:** one v0.7.0 exit criterion, unblocked by the fix
 
 **Symptom:** `/api/state` reports `"cache": {"hits": 0, "misses": 0,
 "hit_rate": null, "reachable": true}` on a system that has processed over a
@@ -464,17 +464,41 @@ the dashboard without ever calling the cache itself, so it is reporting its own
 counters, which are always empty. The correlator has the real numbers and no way
 to publish them.
 
-**Fix:** none yet. The honest options are to publish the counters through Redis
-under a shared key, or to have the correlator write them to a stats table the
-API reads. Both are v1.x work.
+**Fix:** the counters are published through Redis under `stats:cache:*`.
+`cache.STATS` keeps its role as an unflushed per-process delta and is
+incremented on the hot path as before. `cache.flush_stats()` drains those
+deltas with `INCRBY` and is called from the `consume()` loop between batches,
+so no network roundtrip is added to a cache read to measure that read.
+`cache.read_stats()` returns the aggregate, and `api/server.py` now calls it
+instead of reading the local dict.
+
+Three details carry the design:
+
+- **Flush between batches, not inside `_get`.** Paying a roundtrip to measure a
+  roundtrip is self-defeating, and the report makes a latency claim about this
+  cache. The dashboard trails activity by up to one long-poll interval, which
+  for a status bar is not a cost.
+- **A failed flush retains the deltas.** The flush target is the cache itself,
+  so a failure usually means the cache is down, which is exactly when the error
+  count is worth keeping. Asserted by
+  `test_failed_flush_retains_the_deltas`.
+- **`hit_rate` is `None`, never `0.0`, when nothing has been recorded or Redis
+  is unreachable.** A status bar showing 0% for an unknown is the same quiet
+  wrongness as the original defect. `web/app.js` already renders null as `n/a`.
+
+Verified by `TestCacheStatsTransport`, five tests covering publish-and-clear,
+retention on failure, aggregate read, unreachable cache, and the
+never-published case.
 
 **Prevention:** a metric displayed by one process about work performed by
 another needs a transport. This one silently reported a plausible-looking zero
-instead of failing, which is the harder version of the bug.
+instead of failing, which is the harder version of the bug. The general rule:
+a module-level counter is per-process by definition, and any dashboard reading
+one is reporting on the web server, not on the system.
 
 **Consequence for v0.7.0:** the exit criterion "Status bar shows a non-zero
-cache hit rate" cannot be satisfied by capture. It is recorded as unmet with
-this cause rather than left looking like a missing screenshot.
+cache hit rate" is satisfiable again, provided the correlator has processed at
+least one reading before the capture.
 
 ---
 

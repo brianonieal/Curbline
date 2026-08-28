@@ -248,3 +248,39 @@ and silently invalidates the evidence when omitted.
 **Flips if:** `cache.py` ever resolves the cache endpoint per call rather than
 holding a pooled connection. DNS failure then becomes a reachable path and both
 tests are worth running.
+
+---
+
+## D-014 — Publish cache counters through Redis, drained between batches
+
+**Date:** 2026-08-28 | **Gate:** v0.7.0
+
+**Decision:** the cache hit counters live in Redis under `stats:cache:*`.
+`cache.STATS` stays a per-process unflushed delta incremented on the hot path,
+`flush_stats()` drains it with `INCRBY` from the `consume()` loop between
+batches, and the API reads the aggregate through `read_stats()`.
+
+**Why Redis rather than a Postgres stats table.** The counters describe the
+cache, every process already holds a Redis connection, and `INCRBY` is atomic so
+two workers cannot lose each other's counts. A stats table needs a schema
+change, a migration, and a write path to the database on behalf of a status bar.
+
+**Why between batches rather than inside `_get`.** Paying a network roundtrip to
+measure a network roundtrip is self-defeating, and the report makes a latency
+claim about this cache. The cost is that the dashboard trails real activity by
+up to one long-poll interval, which for a status bar is not a cost.
+
+**Rejected:** having the API call `cache.sensor()` itself so it generates its own
+statistics. It is a two-line change and it is dishonest: the dashboard would
+report the web server's cache effectiveness, not the pipeline's. A plausible
+number measuring the wrong thing is worse than a null, and a null was the
+original defect.
+
+**Cost accepted:** the aggregate lives in the cache, so it is lost if Redis is
+flushed or replaced, and a failed flush retains its deltas rather than dropping
+them, which means a long cache outage accumulates unbounded counts in a worker's
+memory. Both are bounded by the fact that these are integers on a dashboard.
+
+**Flips if:** the counters ever need to survive a cache restart, or a second
+metric appears that is not about the cache. Either makes a stats table the right
+home, and at that point move all of them rather than splitting the transport.

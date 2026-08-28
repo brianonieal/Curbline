@@ -162,6 +162,88 @@ class TestCacheDegradation:
 
 
 # ---------------------------------------------------------------------------
+# E-019: the cache counters live in whichever process did the work, and the
+# process that displays them is not that process. These assert the transport,
+# not the counting.
+# ---------------------------------------------------------------------------
+
+class TestCacheStatsTransport:
+    def setup_method(self):
+        from curbline import cache
+        cache.STATS.update(hits=0, misses=0, errors=0)
+        cache._client = None
+
+    def test_flush_publishes_local_counts_and_clears_them(self):
+        """A flush moves the deltas to Redis so another process can read them."""
+        from curbline import cache
+        cache.STATS.update(hits=7, misses=3, errors=1)
+        fake = mock.MagicMock()
+        with mock.patch.object(cache, "client", return_value=fake):
+            cache.flush_stats()
+
+        published = {
+            c.args[0]: c.args[1] for c in fake.incrby.call_args_list
+        }
+        assert published == {
+            "stats:cache:hits": 7,
+            "stats:cache:misses": 3,
+            "stats:cache:errors": 1,
+        }
+        assert cache.STATS == {"hits": 0, "misses": 0, "errors": 0}, (
+            "deltas must be cleared or the next flush double-counts them"
+        )
+
+    def test_failed_flush_retains_the_deltas(self):
+        """
+        The flush target is the thing that just failed. Losing the deltas on a
+        failed flush would silently under-report exactly when the cache is
+        having problems, which is when the number matters most.
+        """
+        import redis
+        from curbline import cache
+        cache.STATS.update(hits=5, misses=2, errors=0)
+        fake = mock.MagicMock()
+        fake.incrby.side_effect = redis.RedisError("down")
+        with mock.patch.object(cache, "client", return_value=fake):
+            cache.flush_stats()
+        assert cache.STATS["hits"] == 5, "a failed flush must not drop counts"
+        assert cache.STATS["misses"] == 2
+
+    def test_read_stats_returns_the_published_aggregate(self):
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.mget.return_value = ["12", "4", "0"]
+        with mock.patch.object(cache, "client", return_value=fake):
+            got = cache.read_stats()
+        assert got == {"hits": 12, "misses": 4, "errors": 0, "hit_rate": 0.75}
+
+    def test_read_stats_survives_an_unreachable_cache(self):
+        """
+        The degradation screenshot depends on this. An unreachable cache makes
+        the hit rate unknown, which is not the same as zero and must not be
+        rendered as one.
+        """
+        import redis
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.mget.side_effect = redis.RedisError("down")
+        with mock.patch.object(cache, "client", return_value=fake):
+            got = cache.read_stats()
+        assert got["hit_rate"] is None
+        assert got["hits"] == 0
+
+    def test_never_published_counters_read_as_unknown_not_zero(self):
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.mget.return_value = [None, None, None]
+        with mock.patch.object(cache, "client", return_value=fake):
+            got = cache.read_stats()
+        assert got["hit_rate"] is None, (
+            "no reads yet is unknown, not a 0% hit rate"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Worker loop semantics, against moto's SQS
 # ---------------------------------------------------------------------------
 

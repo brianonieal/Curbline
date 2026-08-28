@@ -77,9 +77,10 @@ def queue_depths() -> dict[str, dict[str, int]]:
 
 
 def build_state() -> dict[str, Any]:
-    hits = cache.STATS["hits"]
-    misses = cache.STATS["misses"]
-    total = hits + misses
+    # read_stats(), not cache.STATS. The local dict counts only what THIS
+    # process did, and this process never calls the cache, so it always read
+    # zero and rendered as a 0% hit rate on a working cache. That is E-019.
+    cache_stats = cache.read_stats()
     return {
         "sensors": db.sensors_geojson(),
         "zones": db.zones_geojson(),
@@ -99,10 +100,7 @@ def build_state() -> dict[str, Any]:
         "pipeline": {
             "queues": queue_depths(),
             "cache": {
-                "hits": hits,
-                "misses": misses,
-                "errors": cache.STATS["errors"],
-                "hit_rate": round(hits / total, 3) if total else None,
+                **cache_stats,
                 "reachable": cache.healthy(),
             },
             "database": db.ping(),

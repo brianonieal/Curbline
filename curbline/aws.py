@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 import boto3
 
-from . import config
+from . import cache, config
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +119,15 @@ def consume(
             sqs.delete_message(
                 QueueUrl=queue_url, ReceiptHandle=msg["ReceiptHandle"]
             )
+
+        # Between batches, not inside the handler: the counters describe work
+        # this process did, and the process that displays them is the API. See
+        # E-019 for what happens without a transport. Never allowed to raise,
+        # because failing to report a metric must not fail the pipeline.
+        try:
+            cache.flush_stats()
+        except Exception:
+            log.exception("cache stats flush failed, continuing")
 
         if shutdown.requested:
             break

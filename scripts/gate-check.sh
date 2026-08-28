@@ -31,8 +31,20 @@ echo
 echo "Quality"
 # ---------------------------------------------------------------------------
 
+# Both venv layouts, because the gate is run from the Windows dev machine as
+# well as from the EC2 host. Falling through to a bare python3 that lacks the
+# dependencies reported 24 test failures on a clean tree, which is a false hard
+# block and erodes trust in the check exactly as much as a false pass would.
 PY="${PYTHON:-python3}"
-[ -x .venv/bin/python ] && PY=.venv/bin/python
+if [ -x .venv/bin/python ]; then
+  PY=.venv/bin/python
+elif [ -x .venv/Scripts/python.exe ]; then
+  PY=.venv/Scripts/python.exe
+fi
+
+if ! $PY -c "import pytest" >/dev/null 2>&1; then
+  fail "interpreter $PY cannot import pytest. HARD BLOCK: a gate cannot close on an unrun suite."
+fi
 
 if $PY -m pytest tests/ -q >/tmp/gate-tests.txt 2>&1; then
   ok "tests: $(tail -1 /tmp/gate-tests.txt | tr -d '\n')"

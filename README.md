@@ -223,12 +223,14 @@ The status bar carries queue depth, cache hit rate and database reachability,
 because the distributed system is the point and queue depth is the clearest
 visible proof the stages are decoupled.
 
-**The cache hit rate reads null, and that is a known defect, not a cold cache**
-(E-019). `cache.STATS` is a module-level counter, so it only counts what the
-process holding it did. `cache.sensor()` is called by the correlator; the API
-serves its own always-empty copy. The correlator has the real numbers and no
-transport to publish them. Fixing it needs the counters in Redis under a shared
-key or in a stats table, which is v1.x work.
+The hit rate needed a transport to be true (E-019). `cache.STATS` is a
+module-level counter, so it counts only what the process holding it did.
+`cache.sensor()` is called by the correlator, while the API served its own
+always-empty copy and rendered it as a 0% hit rate on a healthy cache. The
+counters are now published to Redis under `stats:cache:*`, drained from the
+worker loop between batches so no roundtrip is added to a cache read to measure
+that read, and the API reads the aggregate. An unknown hit rate reads `n/a`,
+never `0%`, because those are different facts.
 
 ### Building the console without AWS
 
@@ -271,7 +273,7 @@ ElastiCache bill by the hour whether or not anything is using them.
 ```
 CLAUDE.md               Project instructions for Claude Code (read first)
 VERSION_ROADMAP.md      Gated roadmap, v0.5.0 through v2.0.0
-DECISIONS.md            13 decisions, each with a flip condition
+DECISIONS.md            14 decisions, each with a flip condition
 ERRORS.md               19 logged defects, mostly fixed. Do not rediscover.
 TESTS.md                Test registry and stated coverage gaps
 RETENTION.md            Cold-defense drill log and flip watch
@@ -296,7 +298,7 @@ api/mock_server.py      Runs the console with no AWS, for frontend work
 web/                    Console: index.html, style.css, app.js
 data/capture_replay.py  Records a live storm for demo replay
 systemd/                Service units
-tests/                  Clustering fixture and 31 unit tests
+tests/                  Clustering fixture and 36 unit tests
 docs/REPORT.md          The report, mapped to the rubric
 docs/evidence/          CLI captures and S3 audit records from the live run
 DEMO.md                 Run book and evidence checklist

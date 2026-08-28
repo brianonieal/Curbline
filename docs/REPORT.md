@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-31 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+36 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -454,6 +454,7 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and the fallback for an unknown source |
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone id still matches the string in the queue body |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries once |
+| `TestCacheStatsTransport` | 5 | E-019: counters publish and clear, a failed flush retains them, and an unknown hit rate reads null rather than zero |
 
 **What this suite could not catch, stated rather than hidden.** The suite is
 moto throughout and never executed SQL against a real PostGIS instance or
@@ -483,9 +484,11 @@ Full screenshot set in Appendix C. Nine defects were found and fixed during the
 first end-to-end run against real infrastructure, logged as E-009 through E-017
 in `ERRORS.md`. Two more were identified in the evidence capture session: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
-`--region us-east-1` on every call), and E-019, a structural zero on the
-dashboard cache hit rate, an open known limitation described in section 7 and
-Appendix C. That file is part of the deliverable rather than an internal
+`--region us-east-1` on every call), and E-019, a cache hit rate that read zero
+on a working cache because the counter was a module-level dictionary in the
+correlator and the API served its own always-empty copy (fixed: the counters
+are published through Redis and drained between batches). That file is part of
+the deliverable rather than an internal
 artifact, because the failure modes it records, an IAM action name that does not
 exist, a service-linked role a fresh account has never created, and a cache used
 as an existence oracle, are the substance of what building this taught.
@@ -583,13 +586,13 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           31 unit tests plus fixture_clusters.sql
+tests/           36 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
 ```
 
-Governance files at the root: `DECISIONS.md` (12 decisions, each with a flip
+Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
 condition), `ERRORS.md` (19 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
@@ -668,7 +671,7 @@ Captures marked **usgs** are live gage data.
 | `screenshots/e2e-console-active-zone.png` | replay | Console with an active zone drawn, rail filled, advisory queued |
 | `screenshots/e2e-console-depth-change.png` | replay | Same zone before and after, showing depth change on the rail |
 | *(unmet)* | — | A zone with `NWS confirmed`: 0 active flood alerts in the NYC bounding box during the capture window; the corroboration path is unit-tested but not shown in a live screenshot |
-| `screenshots/e2e-console-status-bar.png` | replay | Status bar showing queue depth and PostGIS up; cache hit rate is null per E-019 (the counter lives in the correlator and is never transported to the API) |
+| `screenshots/e2e-console-status-bar.png` | replay | Status bar showing queue depth, a non-zero cache hit rate, and PostGIS up |
 | `screenshots/e2e-api-health.png` | cli | `curl /api/health` output |
 | `screenshots/e2e-cache-degraded.png` | replay | Stop ElastiCache, reload the console, show it still working with the cache pip amber |
 
