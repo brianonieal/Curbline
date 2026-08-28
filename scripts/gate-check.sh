@@ -81,11 +81,16 @@ if git diff --cached --name-only 2>/dev/null | grep -qE '^\.env$|stack\.json$'; 
 fi
 [ "$SECRET_LEAK" -eq 0 ] && ok "no secret files tracked or staged"
 
-grep -rInE '(AKIA[0-9A-Z]{16}|aws_secret_access_key\s*=)' \
-  --include='*.py' --include='*.sh' --include='*.js' --include='*.md' . 2>/dev/null \
-  | grep -v 'gate-check.sh' | grep -q . \
-  && fail "possible hardcoded AWS credential. HARD BLOCK." \
-  || ok "no hardcoded AWS credentials found"
+# Scan what git tracks, not what happens to sit in the working directory. A
+# .venv under the repo trips every pattern below: botocore assigns
+# aws_secret_access_key, and moto ships import docker plus AWS::Lambda model
+# names. The gate is a claim about this repository, not about its dependencies.
+CRED_RE='(AKIA[0-9A-Z]{16}|aws_secret_access_key[[:space:]]*=)'
+if git ls-files -z '*.py' '*.sh' '*.js' '*.md' 2>/dev/null | xargs -0 -r grep -InE "$CRED_RE" 2>/dev/null | grep -v '^scripts/gate-check[.]sh:' | grep -q .; then
+  fail "possible hardcoded AWS credential. HARD BLOCK."
+else
+  ok "no hardcoded AWS credentials found"
+fi
 
 # ---------------------------------------------------------------------------
 echo
@@ -94,7 +99,7 @@ echo "Constraint compliance (assignment bans)"
 
 BANNED=0
 for term in 'import docker' 'FROM python:' 'apiVersion: apps/v1' 'AWS::Lambda' 'boto3.client("lambda")' "boto3.client('lambda')"; do
-  if grep -rIl --exclude-dir=.git --exclude='gate-check.sh' -F "$term" . 2>/dev/null | grep -q .; then
+  if git ls-files -z 2>/dev/null | xargs -0 -r grep -Il -F "$term" 2>/dev/null | grep -v '^scripts/gate-check[.]sh$' | grep -q .; then
     fail "banned technology reference found: $term"
     BANNED=1
   fi

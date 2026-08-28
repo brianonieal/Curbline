@@ -95,6 +95,27 @@ Rotate the audience. Each shape tests something different.
 - Why should an emergency coordinator trust this over what they use now?
 - What is the one thing most likely to make this wrong?
 
+### v0.5.0 infrastructure and pipeline
+
+> Added 2026-08-28 after the first end-to-end run. Every one of these is a
+> mechanism question with a wrong answer that sounds right, which is the whole
+> reason they belong in the pool.
+
+- PostgreSQL told you `function current_clusters(...) does not exist` while the
+  function was sitting in the schema. What actually happened, and why did the
+  message say that?
+- You applied an IAM policy successfully and it authorized nothing. Explain how
+  a policy can be valid, applied, and useless at the same time.
+- Before this gate, no advisory had ever fired in any run of the system. The
+  lifecycle function that decides advisories was unit tested and correct. Where
+  was the bug, and why did no test catch it?
+- A Redis cache hit caused a Postgres write to fail. Walk through the mechanism,
+  and say what a cache is allowed to be evidence of.
+- Your detection threshold was 5 cm while the collector was reading USGS stage
+  rise. What did the dashboard show, and why is that number not a flood depth?
+- RDS reported "Missing necessary credentials" when your credentials were fine.
+  What was actually missing, and who was it missing for?
+
 ### Derivation and mechanism
 > Known hole in the system: the drill covers build decisions, not derivations.
 > A bypassed derivation is not caught by anything downstream. These are here
