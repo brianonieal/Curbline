@@ -212,6 +212,34 @@ tags are set anywhere, so no tagging actions are needed.
 
 ---
 
+## E-011 — RDS reports missing credentials when the account is the problem
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** one provision run, stopped before RDS was created
+
+**Symptom:** `provision.py` clears every network, queue, topic and bucket step,
+then dies on `CreateDBSubnetGroup` with `InvalidParameterValue: Missing
+necessary credentials`, linking to the RDS service-linked roles page.
+
+**Root cause:** RDS needs the account-level `AWSServiceRoleForRDS` to exist
+before its first create call, and an account that has never provisioned RDS does
+not have one. The instance role's credentials were fine. The message names
+credentials because RDS cannot assume a role that was never created, and the
+account, not the caller, is what is missing something. ElastiCache has the same
+requirement and fails the same way a minute later.
+
+**Fix:** `account-setup.sh` now creates both service-linked roles, for
+`rds.amazonaws.com` and `elasticache.amazonaws.com`, before the instance role
+work. Creating them requires `iam:CreateServiceLinkedRole`, so this belongs to
+the console identity in CloudShell and deliberately not to the instance policy,
+which grants no `iam:` actions at all.
+
+**Prevention:** read an AWS error for who is missing what before assuming it is
+the caller. "Missing necessary credentials" on a first-ever call to a service
+usually means an account-level prerequisite, not a bad policy. A first run in a
+fresh account exercises setup paths that never appear again, which is the
+argument for provisioning in a clean account at least once before the demo.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

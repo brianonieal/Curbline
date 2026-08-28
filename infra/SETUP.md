@@ -71,6 +71,13 @@ bash ~/account-setup.sh 203.0.113.7/32
 It creates the key pair, launches a `t3.micro` probe instance, waits for it to
 reach `running`, creates the `curbline-ec2` role with the scoped policy, builds
 and associates the instance profile, and opens tcp/22 to your address only.
+It also creates the RDS and ElastiCache service-linked roles, which a brand new
+account does not have and which cannot be created from the instance.
+
+Those two roles are worth understanding rather than just running. Without
+them, `provision.py` fails on `CreateDBSubnetGroup` with
+`InvalidParameterValue: Missing necessary credentials`, which points at the
+instance role and is the wrong place to look. See E-011.
 
 The instance launches **before** the IAM work on purpose. A new-account identity
 or payment verification hold, or a zero vCPU quota in the region, both surface at

@@ -70,6 +70,24 @@ IP=$(aws ec2 describe-instances --instance-ids "$IID" \
        --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 echo "running, public ip $IP"
 
+# --- service-linked roles -------------------------------------------------
+# RDS and ElastiCache each need an account-level service-linked role to exist
+# before their first create call. A brand new account has neither. The failure
+# is reported as InvalidParameterValue "Missing necessary credentials" on
+# CreateDBSubnetGroup, which reads like a credentials problem and sends you
+# looking at the instance role instead of at the account. Creating these needs
+# iam:CreateServiceLinkedRole, which is exactly why it happens here under your
+# console identity rather than from the instance.
+say "service-linked roles"
+for svc in rds elasticache; do
+  if aws iam create-service-linked-role --aws-service-name "$svc.amazonaws.com" >/dev/null 2>&1; then
+    echo "created the $svc service-linked role"
+  else
+    echo "$svc service-linked role already present"
+  fi
+done
+
+
 # --- instance role --------------------------------------------------------
 say "iam role"
 if aws iam get-role --role-name "$ROLE" >/dev/null 2>&1; then
