@@ -10,7 +10,7 @@ account is on. The console reports:
 > Credits cover your free plan costs. Your access to AWS services will end when
 > credits are depleted or free period ends.
 
-**Account status:** AWS Free Plan, account 477977196933, credit-based, not
+**Account status:** AWS Free Plan, credit-based, not
 hour-based. One shared $100 pool, not three 750-hour clocks. The 750-hour
 framing below is retained for the per-service rates, which are still correct,
 but the allowance model it describes does not apply here.
