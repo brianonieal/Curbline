@@ -213,20 +213,40 @@ RDS creation time.** Anything missing after this point is unrecoverable inside
 the deadline. Walk this against files on disk, not against a memory of having
 taken them.
 
-**Captures that require live AWS. Open each file and confirm it is legible.**
+**Everything textual is one command. Run it on the EC2 host:**
 
-- [ ] Six console screenshots: RDS, ElastiCache, SQS, SNS, S3, EC2
+```bash
+./scripts/capture-evidence.sh
+```
+
+It writes twenty-odd artifacts to `docs/evidence/cli/` and a `MANIFEST.md`
+listing what it got and what it could not get, each failure with its reason. It
+never aborts on a failed capture, because a partial evidence set beats one that
+stopped silently at item four. Every `aws` call is pinned to `us-east-1` per
+E-018, and the clustering query passes its parameters explicitly rather than
+inheriting the function's FloodNet defaults per E-025.
+
+- [ ] `./scripts/capture-evidence.sh` run, exit 0
+- [ ] `docs/evidence/cli/MANIFEST.md` read, and **every** line under MISSING
+      either resolved by re-running or written into an Appendix C row with its
+      reason. Do not tear down with an unexplained entry.
+
+**Two things the script proves that nothing else does.** Check these by eye in
+the output, because they are the evidence that two severe defects are actually
+dead rather than merely fixed in a unit test:
+
+- [ ] `advisories-per-zone.txt` shows at least one zone with **more than one**
+      advisory, and a ladder like `monitor -> advisory -> warning`. One row per
+      zone means E-021 is still live and escalation is being suppressed.
+- [ ] `zone-states.txt` shows at least one zone not in `forming`/`active`. If
+      every zone is open forever, E-020's sweep is not running.
+
+**Still manual, because they need a browser or a mailbox:**
+
+- [ ] Six AWS console screenshots: RDS, ElastiCache, SQS, SNS, S3, EC2
 - [ ] Cache-unreachable pair: degraded with amber pip, and healthy again after
       re-authorising
-- [ ] `systemctl status 'curbline-*'` with four units active
-- [ ] Three `journalctl` views: collector, correlator, dispatcher
-- [ ] SQS queue depth non-zero
-- [ ] `redis-cli INFO keyspace`
-- [ ] `curl /api/health`
-- [ ] `SELECT PostGIS_Full_Version();`
-- [ ] `SELECT * FROM current_clusters();`
-- [ ] `aws s3 ls` of `advisories/`, plus one audit object opened and readable
-- [ ] `advisories` rows showing `sns_message_id` and `audit_key`
+- [ ] One S3 audit object opened and readable
 - [ ] Duplicate-delivery replay: same `ingest_id`, one row before and after
 - [ ] Console: zero zones, active zone, before and after depth change
 - [ ] Console: status bar showing a non-zero cache hit rate
