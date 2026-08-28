@@ -126,14 +126,24 @@ with an audit record in S3.
 **Not in scope:** the console, the report.
 
 **Exit criteria**
-- [ ] `systemctl status 'curbline-*'` shows four active units
-- [ ] `SELECT count(*) FROM readings` is non-zero and growing
-- [ ] `SELECT * FROM current_clusters()` returns at least one zone
-- [ ] At least one row in `zones` and one in `advisories`
+- [x] `systemctl status 'curbline-*'` shows four active units
+- [x] `SELECT count(*) FROM readings` is non-zero and growing
+- [x] `SELECT * FROM current_clusters()` returns at least one zone
+- [x] At least one row in `zones` and one in `advisories`
 - [ ] SNS email received
-- [ ] S3 object present under `advisories/` with thresholds recorded inside
-- [ ] Duplicate-delivery path verified: replay a message, confirm the skip
-- [ ] Prior gate still holds
+- [x] S3 object present under `advisories/` with thresholds recorded inside
+- [x] Duplicate-delivery path verified: replay a message, confirm the skip
+- [x] Prior gate still holds
+
+
+**Evidence provenance.** Seven of these eight were satisfied on 2026-08-28
+during the v0.5.0 run, not during a separately opened v0.6.0. That happened
+because closing E-013, E-016 and E-017 required the pipeline to actually run end
+to end, and once it did, most of this gate was already demonstrated. Recorded
+here rather than re-run, with the artifacts: three `warning` advisories carrying
+distinct SNS message ids, three matching S3 audit objects, and a replayed
+`ingest_id` that stayed at one row. The SNS email is the only item outstanding
+and it is blocked on confirming the subscription, not on the pipeline.
 
 **Estimate:** 3 to 4 hours.
 
