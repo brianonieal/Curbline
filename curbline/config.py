@@ -104,6 +104,15 @@ CORROBORATED_WARNING_CM = float(os.environ.get(
     "CURBLINE_CORROBORATED_WARNING_CM",
     ADVISORY_THRESHOLD_CM + 0.2 * (WARNING_THRESHOLD_CM - ADVISORY_THRESHOLD_CM),
 ))
+# Mid-scale reference line on the dashboard depth gauge. On FloodNet this is
+# literally curb height, which is why the frontend key is curb_cm. On USGS it
+# is a scale midpoint with no physical meaning, and the report should not
+# call it a curb. Derived as advisory plus half the advisory-to-warning gap,
+# which reproduces the FloodNet 15.0 the API hardcoded.
+CURB_REFERENCE_CM = float(os.environ.get(
+    "CURBLINE_CURB_REFERENCE_CM",
+    ADVISORY_THRESHOLD_CM + 0.5 * (WARNING_THRESHOLD_CM - ADVISORY_THRESHOLD_CM),
+))
 READING_WINDOW_MINS = int(os.environ.get("CURBLINE_READING_WINDOW_MINS", "15"))
 CLUSTER_EPS_FT = float(os.environ.get("CURBLINE_CLUSTER_EPS_FT", "1640"))
 CLUSTER_MIN_SENSORS = int(os.environ.get("CURBLINE_CLUSTER_MIN_SENSORS", "2"))

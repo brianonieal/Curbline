@@ -86,11 +86,15 @@ def build_state() -> dict[str, Any]:
         "alerts": db.alerts_geojson(),
         "advisories": db.recent_advisories(),
         "counts": db.counts(),
+        # All four come from config. Three of them were literals here, which
+        # meant the dashboard drew a FloodNet gauge no matter what the collector
+        # was reading, and the empty-state copy quoted a threshold the pipeline
+        # was not using. See E-014.
         "thresholds": {
             "detect_cm": config.DEPTH_THRESHOLD_CM,
-            "advisory_cm": 10.0,
-            "curb_cm": 15.0,
-            "warning_cm": 20.0,
+            "advisory_cm": config.ADVISORY_THRESHOLD_CM,
+            "curb_cm": config.CURB_REFERENCE_CM,
+            "warning_cm": config.WARNING_THRESHOLD_CM,
         },
         "pipeline": {
             "queues": queue_depths(),
