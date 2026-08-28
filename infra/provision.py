@@ -464,6 +464,12 @@ def main() -> None:
         f"CURBLINE_CACHE_PORT={cache['port']}\n"
         f"CURBLINE_QUEUE_INGEST={queues['ingest']['url']}\n"
         f"CURBLINE_QUEUE_ZONES={queues['zones']['url']}\n"
+        # The DLQs are separate queues with their own URLs. The console used to
+        # guess them by appending "-dlq" to the working queue's URL, which
+        # points at nothing, so dead-lettered messages were invisible on the
+        # dashboard. See E-024.
+        f"CURBLINE_QUEUE_INGEST_DLQ={queues['ingest']['dlq_url']}\n"
+        f"CURBLINE_QUEUE_ZONES_DLQ={queues['zones']['dlq_url']}\n"
         f"CURBLINE_SNS_TOPIC={topic_arn}\n"
         f"CURBLINE_AUDIT_BUCKET={bucket}\n"
     )

@@ -51,29 +51,63 @@ def queue_depths() -> dict[str, dict[str, int]]:
     components really are decoupled and really are passing work through a
     queue rather than calling each other.
     """
+    def depth(url: str) -> dict[str, int]:
+        attrs = aws.sqs.get_queue_attributes(
+            QueueUrl=url,
+            AttributeNames=[
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesNotVisible",
+            ],
+        )["Attributes"]
+        return {
+            "waiting": int(attrs.get("ApproximateNumberOfMessages", 0)),
+            "in_flight": int(
+                attrs.get("ApproximateNumberOfMessagesNotVisible", 0)
+            ),
+        }
+
     out: dict[str, dict[str, int]] = {}
-    for label, url, dlq in (
-        ("ingest", config.QUEUE_INGEST, config.QUEUE_INGEST + "-dlq"),
-        ("zones", config.QUEUE_ZONES, config.QUEUE_ZONES + "-dlq"),
+    for label, url, dlq_url in (
+        ("ingest", config.QUEUE_INGEST, config.QUEUE_INGEST_DLQ),
+        ("zones", config.QUEUE_ZONES, config.QUEUE_ZONES_DLQ),
     ):
         try:
-            attrs = aws.sqs.get_queue_attributes(
-                QueueUrl=url,
-                AttributeNames=[
-                    "ApproximateNumberOfMessages",
-                    "ApproximateNumberOfMessagesNotVisible",
-                ],
-            )["Attributes"]
-            out[label] = {
-                "waiting": int(attrs.get("ApproximateNumberOfMessages", 0)),
-                "in_flight": int(
-                    attrs.get("ApproximateNumberOfMessagesNotVisible", 0)
-                ),
-            }
+            out[label] = depth(url)
         except Exception:
             out[label] = {"waiting": -1, "in_flight": -1}
-        _ = dlq
+
+        # A dead-lettered message is a message the pipeline gave up on after
+        # five receives. It was previously computed and discarded, so the one
+        # queue whose depth means something is wrong was the one never shown.
+        if dlq_url:
+            try:
+                out[f"{label}-dlq"] = depth(dlq_url)
+            except Exception:
+                out[f"{label}-dlq"] = {"waiting": -1, "in_flight": -1}
     return out
+
+
+def health_status(database: bool, cache_ok: bool,
+                  workers: dict[str, bool | None]) -> str:
+    """
+    One word for the whole system.
+
+    Worker liveness is in here because without it this endpoint returned "ok"
+    with all three graded components dead: RDS answers, Redis answers, the
+    queues drain to zero, and an empty queue is indistinguishable from a
+    healthy one. Green over a stopped pipeline. See E-023.
+
+    A worker whose liveness is None is unknown, not dead, and unknown does not
+    degrade the verdict. An unreachable Redis already shows up as cache_ok
+    False; counting it a second time as three stopped workers would point
+    whoever reads this at the wrong box.
+    """
+    if not database:
+        return "down"
+    stopped = [w for w, live in workers.items() if live is False]
+    if stopped or not cache_ok:
+        return "degraded"
+    return "ok"
 
 
 def build_state() -> dict[str, Any]:
@@ -194,11 +228,12 @@ async def health() -> JSONResponse:
     def check() -> dict[str, Any]:
         database = db.ping()
         cache_ok = cache.healthy()
+        workers = cache.worker_liveness()
         return {
-            "status": "ok" if (database and cache_ok)
-                      else "degraded" if database else "down",
+            "status": health_status(database, cache_ok, workers),
             "database": database,
             "cache": cache_ok,
+            "workers": workers,
             "queues": queue_depths(),
             "source": config.SOURCE,
         }

@@ -580,6 +580,84 @@ reading the comment and then the line.
 
 ---
 
+## E-022 - The map paints FloodNet thresholds regardless of source
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** would have produced a misleading graded screenshot
+
+**Symptom:** on the default `usgs` source, every gauge showing a 5 cm stage rise
+renders as a filled "wet" dot on the map, while the depth rail immediately below
+it shows nothing above threshold. The same dashboard disagrees with itself.
+
+**Root cause:** `web/app.js` hardcoded the FloodNet numbers into the MapLibre
+layer expressions: `5` in the sensor-dry and sensor-wet filters, and the ramp
+`5, 12, 20, 30` in both colour interpolations. Two lines away, the rail at the
+same time correctly read `state.thresholds.detect_cm`. Under `usgs` that value
+is 60, so the map and the rail were drawing different systems.
+
+This is E-014 a third time. The thresholds were literals in the dispatcher
+(fixed), then literals in the API payload (fixed), and were still literals in
+the frontend. Each fix was real and each stopped one layer short.
+
+**Fix:** `applyThresholds()` rewrites the filters and both ramps from
+`state.thresholds` on the first frame and whenever they change, guarded so it
+does not force a repaint every tick. The stops left in the layer definitions are
+labelled placeholders, because a bare `5` sitting in the source is exactly what
+made this survive two previous fixes.
+
+**Prevention:** when a constant is discovered to be source-dependent, grep the
+whole tree for its value before closing the entry, including the frontend.
+"Fixed in the backend" is not fixed.
+
+---
+
+## E-023 - /api/health reports ok with all three graded components dead
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** would have made a graded screenshot prove nothing
+
+**Symptom:** stop the collector, correlator and dispatcher. `/api/health`
+returns HTTP 200 and `"status": "ok"`, and the console status bar is fully
+green, over a system that has stopped doing every piece of work it is graded on.
+
+**Root cause:** health checked only `db.ping()` and `cache.healthy()`. RDS and
+ElastiCache are unaffected by a stopped worker, so both answer. The queues drain
+to zero because nothing is producing, and **an empty queue is indistinguishable
+from a healthy one** from the API's side. No component reported liveness because
+there was nothing for it to report liveness to.
+
+**Fix:** each worker writes `heartbeat:<component>` to Redis with a 120 second
+TTL from inside its loop, before the long poll rather than after it, so an idle
+worker on an empty queue still reports alive. Liveness is "this process is
+looping", not "this process has work". `health_status()` is a pure function and
+degrades on any expired heartbeat. A worker whose liveness is unknown (Redis
+unreachable) does not degrade the verdict, because that already shows up as
+`cache: false` and counting it twice points the reader at the wrong box.
+
+**Prevention:** a health endpoint that cannot fail is not a health endpoint. The
+test to apply to any such check: name the failure it would catch, then cause
+that failure and watch it. This one had never been run against a stopped worker.
+
+---
+
+## E-024 - Dead-letter queue depth was computed and thrown away
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** small, found by audit
+
+**Symptom:** a message that failed five times and moved to a dead-letter queue
+is invisible on the dashboard. `queue_depths()` documents itself as returning
+depth "including the dead-letter queues" and returns two entries, neither a DLQ.
+
+**Root cause:** two independent faults stacked. The function built a DLQ URL,
+then discarded it with `_ = dlq`. And the URL it built would not have worked:
+it appended `-dlq` to the working queue's URL, while `provision.py` creates each
+DLQ as a separate queue with its own URL. `provision.py` had the correct URLs
+and never wrote them to `.env`, so nothing downstream could reach them.
+
+**Fix:** `provision.py` writes `CURBLINE_QUEUE_*_DLQ`, config reads them as
+optional (a stack provisioned before this still runs, it just cannot report DLQ
+depth), and `queue_depths()` queries and returns them.
+
+**Prevention:** `_ = x` is a silenced linter, not a decision. It was hiding an
+unfinished feature that the docstring above it claimed was finished.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

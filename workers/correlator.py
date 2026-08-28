@@ -143,9 +143,12 @@ def maybe_cluster() -> None:
             "detected_at": time.time(),
         })
 
+    # read_stats(), not STATS. The local dict is a delta that aws.consume()
+    # drains between batches, so by the time this runs it is usually all zeros
+    # and reads as a broken cache on a working one.
+    stats = cache.read_stats()
     log.info("published %d candidate zones (cache hits=%d misses=%d errors=%d)",
-             len(clusters), cache.STATS["hits"],
-             cache.STATS["misses"], cache.STATS["errors"])
+             len(clusters), stats["hits"], stats["misses"], stats["errors"])
 
 
 def handle(body: dict[str, Any]) -> None:
@@ -167,7 +170,7 @@ def handle(body: dict[str, Any]) -> None:
 def main() -> int:
     shutdown = aws.Shutdown()
     log.info("consuming %s", config.QUEUE_INGEST)
-    aws.consume(config.QUEUE_INGEST, handle, shutdown)
+    aws.consume(config.QUEUE_INGEST, handle, shutdown, component="correlator")
     log.info("correlator stopped")
     return 0
 

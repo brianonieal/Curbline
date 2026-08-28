@@ -45,6 +45,12 @@ CACHE_TTL_SECONDS = int(os.environ.get("CURBLINE_CACHE_TTL", "300"))
 
 QUEUE_INGEST = _req("CURBLINE_QUEUE_INGEST")
 QUEUE_ZONES = _req("CURBLINE_QUEUE_ZONES")
+
+# Optional rather than required: a stack provisioned before these were written
+# to .env still runs, it just cannot report dead-letter depth. Absent is handled
+# explicitly at the call site rather than guessed at.
+QUEUE_INGEST_DLQ = os.environ.get("CURBLINE_QUEUE_INGEST_DLQ") or None
+QUEUE_ZONES_DLQ = os.environ.get("CURBLINE_QUEUE_ZONES_DLQ") or None
 SNS_TOPIC = _req("CURBLINE_SNS_TOPIC")
 AUDIT_BUCKET = _req("CURBLINE_AUDIT_BUCKET")
 

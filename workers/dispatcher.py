@@ -246,7 +246,7 @@ def main() -> int:
     sweeper.start()
 
     log.info("consuming %s", config.QUEUE_ZONES)
-    aws.consume(config.QUEUE_ZONES, handle, shutdown)
+    aws.consume(config.QUEUE_ZONES, handle, shutdown, component="dispatcher")
     sweeper.join(timeout=5)
     log.info("dispatcher stopped")
     return 0

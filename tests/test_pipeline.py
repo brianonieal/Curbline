@@ -388,6 +388,42 @@ class TestWorkerHeartbeat:
             cache.beat("collector")  # must not raise
 
 
+class TestHealthVerdict:
+    """E-023: /api/health returned ok with every graded component stopped."""
+
+    ALL_LIVE = {"collector": True, "correlator": True, "dispatcher": True}
+
+    def test_all_live_is_ok(self):
+        from api.server import health_status
+        assert health_status(True, True, self.ALL_LIVE) == "ok"
+
+    def test_a_stopped_worker_degrades_the_whole_system(self):
+        from api.server import health_status
+        workers = dict(self.ALL_LIVE, dispatcher=False)
+        assert health_status(True, True, workers) == "degraded", (
+            "a dead dispatcher issues no advisories; that is not a healthy system"
+        )
+
+    def test_every_worker_dead_is_not_ok(self):
+        """The exact scenario: infrastructure up, pipeline stopped."""
+        from api.server import health_status
+        workers = {k: False for k in self.ALL_LIVE}
+        assert health_status(True, True, workers) != "ok"
+
+    def test_unknown_liveness_does_not_degrade(self):
+        """
+        An unreachable Redis already reports cache False. Counting it again as
+        three stopped workers would send someone to debug the wrong box.
+        """
+        from api.server import health_status
+        workers = {k: None for k in self.ALL_LIVE}
+        assert health_status(True, True, workers) == "ok"
+
+    def test_database_down_outranks_everything(self):
+        from api.server import health_status
+        assert health_status(False, True, self.ALL_LIVE) == "down"
+
+
 # ---------------------------------------------------------------------------
 # Worker loop semantics, against moto's SQS
 # ---------------------------------------------------------------------------

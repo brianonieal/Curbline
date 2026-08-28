@@ -114,7 +114,8 @@ def main() -> int:
     alerts.start()
 
     aws.poll_loop(
-        lambda: poll_sensors(source), config.SENSOR_POLL_SECONDS, shutdown
+        lambda: poll_sensors(source), config.SENSOR_POLL_SECONDS, shutdown,
+        component="collector",
     )
     alerts.join(timeout=5)
     log.info("collector stopped")

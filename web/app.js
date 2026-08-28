@@ -81,6 +81,9 @@ function initMap() {
     map.addLayer({
       id: 'zone-fill', type: 'fill', source: 'zones',
       paint: {
+        // Placeholder stops. applyThresholds() overwrites these from
+        // state.thresholds on the first frame; they are only what the layer
+        // holds before any state has arrived. Do not read them as calibration.
         'fill-color': [
           'interpolate', ['linear'], ['get', 'max_depth_cm'],
           5, WATER[0], 12, WATER[1], 20, WATER[2], 30, WATER[3],
@@ -128,6 +131,7 @@ function initMap() {
           'interpolate', ['linear'], ['get', 'depth_cm'],
           5, 4, 20, 8.5, 40, 13,
         ],
+        // Placeholder stops, overwritten by applyThresholds(). See above.
         'circle-color': [
           'interpolate', ['linear'], ['get', 'depth_cm'],
           5, WATER[0], 12, WATER[1], 20, WATER[2], 30, WATER[3],
@@ -382,8 +386,59 @@ function setLink(cls, text) {
   $('txt-link').textContent = text;
 }
 
+// The map layers are created before any state arrives, so their depth
+// expressions start on placeholder stops and have to be corrected once the
+// real thresholds land. Skipped when unchanged: this runs on every frame and
+// setPaintProperty forces a repaint.
+let appliedThresholds = null;
+
+function thresholdsChanged(t) {
+  const key = `${t.detect_cm}/${t.advisory_cm}/${t.warning_cm}`;
+  if (key === appliedThresholds) return false;
+  appliedThresholds = key;
+  return true;
+}
+
+function waterRamp(t) {
+  // Four stops spanning detection to warning, so the colour ramp means the
+  // same thing on any source. Hardcoding 5/12/20/30 made every gauge with a
+  // 5 cm stage rise paint as flooded under the usgs default, where detection
+  // does not start until 60. That is E-014 surviving in the frontend after it
+  // was fixed in the API. See E-022.
+  const span = Math.max(t.warning_cm - t.detect_cm, 1);
+  return [
+    'interpolate', ['linear'], ['get', 'depth_cm'],
+    t.detect_cm, WATER[0],
+    t.detect_cm + span * 0.35, WATER[1],
+    t.advisory_cm, WATER[2],
+    t.warning_cm, WATER[3],
+  ];
+}
+
+function applyThresholds(t) {
+  if (!mapReady || !thresholdsChanged(t)) return;
+
+  map.setFilter('sensor-dry', ['any',
+    ['==', ['get', 'depth_cm'], null],
+    ['<', ['get', 'depth_cm'], t.detect_cm]]);
+  map.setFilter('sensor-wet', ['all',
+    ['!=', ['get', 'depth_cm'], null],
+    ['>=', ['get', 'depth_cm'], t.detect_cm]]);
+
+  map.setPaintProperty('sensor-wet', 'circle-color', waterRamp(t));
+  map.setPaintProperty('sensor-wet', 'circle-radius', [
+    'interpolate', ['linear'], ['get', 'depth_cm'],
+    t.detect_cm, 4, t.advisory_cm, 8.5, t.warning_cm, 13,
+  ]);
+
+  const zoneRamp = waterRamp(t).slice();
+  zoneRamp[2] = ['get', 'max_depth_cm'];
+  map.setPaintProperty('zone-fill', 'fill-color', zoneRamp);
+}
+
 function apply(state) {
   latest = state;
+  applyThresholds(state.thresholds);
   paintChrome(state);
   paintRail(state);
   paintQueue(state);

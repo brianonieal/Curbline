@@ -83,6 +83,7 @@ def consume(
     handler: Callable[[dict[str, Any]], None],
     shutdown: Shutdown,
     max_messages: int = 10,
+    component: str | None = None,
 ) -> None:
     """
     Long-polling SQS consumer.
@@ -99,6 +100,13 @@ def consume(
         will occasionally see the same message twice.
     """
     while not shutdown.requested:
+        # Before the long poll, so an idle worker on an empty queue still
+        # reports alive. Liveness is "this process is looping", not "this
+        # process has work", and conflating them makes a quiet night look
+        # like an outage.
+        if component:
+            cache.beat(component)
+
         resp = sqs.receive_message(
             QueueUrl=queue_url,
             MaxNumberOfMessages=max_messages,
@@ -137,10 +145,13 @@ def poll_loop(
     fn: Callable[[], None],
     interval_seconds: int,
     shutdown: Shutdown,
+    component: str | None = None,
 ) -> None:
     """Run fn on a fixed cadence, staying responsive to SIGTERM between ticks."""
     while not shutdown.requested:
         started = time.monotonic()
+        if component:
+            cache.beat(component)
         try:
             fn()
         except Exception:
