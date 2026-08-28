@@ -263,6 +263,39 @@ block like this is invisible rather than merely annoying.
 
 ---
 
+## E-013 — Correlator crashes on every message, dashboard never ticks
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** the pipeline produced nothing while every other component looked healthy
+
+**Symptom:** all four services report `active`, the dashboard serves, and it sits
+on "Waiting for the first pipeline tick." `journalctl -u curbline-correlator`
+shows `psycopg.errors.UndefinedFunction: function current_clusters(double
+precision, smallint, double precision, smallint) does not exist`, with a hint
+about explicit type casts.
+
+**Root cause:** the function is declared `current_clusters(NUMERIC, INT,
+NUMERIC, INT)`. `config.DEPTH_THRESHOLD_CM` and `config.CLUSTER_EPS_FT` are
+Python floats, which psycopg sends as `double precision`. PostgreSQL casts
+`smallint` to `integer` implicitly, so the two INT parameters resolved fine, but
+`double precision` to `numeric` is an assignment cast, not an implicit one, and
+function resolution does not apply assignment casts. The function existed the
+whole time. Only the call was unresolvable, which is why the error says "does
+not exist" rather than naming a type problem.
+
+**Fix:** `db.py` calls `current_clusters(%s::numeric, %s::int, %s::numeric,
+%s::int)`. Cast at the call site rather than widening the signature, because
+NUMERIC is the right declaration for a depth in centimetres and a distance in
+feet.
+
+**Prevention:** "function does not exist" from PostgreSQL means no candidate
+matched the argument types, not that the name is absent. Read the parenthesised
+types in the message before assuming the schema failed to load. This class of
+bug is invisible to the current test suite, which uses moto throughout and never
+executes SQL against a real PostGIS instance. That is a real coverage gap, not
+an oversight to hide: the first time this query ran against Postgres was in
+production on the graded instance.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

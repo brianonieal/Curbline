@@ -138,13 +138,17 @@ def upsert_alert(
 
 def current_clusters() -> list[dict[str, Any]]:
     """Run DBSCAN over currently-inundated sensors and return zone candidates."""
+    # The casts are load-bearing. current_clusters declares NUMERIC for the
+    # depth and distance parameters, psycopg sends Python floats as double
+    # precision, and double precision to numeric is an assignment cast rather
+    # than an implicit one, so PostgreSQL will not resolve the call. See E-013.
     with cursor() as cur:
         cur.execute(
             """
             SELECT cluster_id, sensor_ids, sensor_count, max_depth_cm,
                    ST_AsGeoJSON(hull) AS hull_geojson,
                    alert_for_hull(hull) AS alert_id
-            FROM current_clusters(%s, %s, %s, %s)
+            FROM current_clusters(%s::numeric, %s::int, %s::numeric, %s::int)
             """,
             (config.DEPTH_THRESHOLD_CM, config.READING_WINDOW_MINS,
              config.CLUSTER_EPS_FT, config.CLUSTER_MIN_SENSORS),
