@@ -11,9 +11,12 @@
 *Rubric: Real-World Problem Relevance, 10 pts*
 
 On 1 September 2021 the remnants of Hurricane Ida dropped more rain on New York
-City in an hour than the sewer system was built to carry. Eleven people died in
-basement apartments in Queens and Brooklyn. The failure was not a shortage of
-rainfall data. Radar, gauges and forecasts all showed the storm. What nobody had
+City in an hour than the sewer system was built to carry. Thirteen people in the
+city died in the immediate flooding, and eleven of them drowned in basement
+apartments.[^ida] A systematic review of the death records found drowning in
+unregulated basement units to be the most common circumstance, and named the
+suddenness of onset and inadequate exits as recurring themes. The failure was
+not a shortage of rainfall data. Radar, gauges and forecasts all showed the storm. What nobody had
 was street-level water depth aggregated into a statement an operations person
 could act on: *this block is flooding now*.
 
@@ -59,6 +62,14 @@ This is a configuration of existing practice, not a new method. DBSCAN is from
 network against an authoritative warning feed is standard practice in
 environmental monitoring. The contribution here is that the gap between those
 two specific tools is filled, and that the output is shaped like a decision.
+
+[^ida]: Lieberman-Cribbin, W., et al. "Immediate Injury Deaths Related to the
+Remnants from Hurricane Ida in New York City, September 1-2, 2021."
+*Disaster Medicine and Public Health Preparedness*, Cambridge University Press.
+<https://www.cambridge.org/core/journals/disaster-medicine-and-public-health-preparedness/article/immediate-injury-deaths-related-to-the-remnants-from-hurricane-ida-in-new-york-city-september-12-2021/69BD8C527FD016A2CAC703C7023B2251>
+The eleven basement-apartment figure was also given by the Mayor's office at the
+time and is widely reported in contemporaneous coverage. The peer-reviewed
+record review is cited here because it is the source that survives scrutiny.
 
 ---
 
@@ -501,11 +512,32 @@ Nine, stated plainly.
 8. **The database credential is in a mode-600 env file.** The assignment's
    permitted service list excludes Secrets Manager (D-011). This is
    constraint-driven and is not good practice.
-9. **The demonstration used replayed data.** The end-to-end advisory evidence in
-   Appendix C was produced by `data/replay.example.json`, a four-frame recorded
-   storm progression, disclosed as a replay in `curbline/sources.py` and here.
-   The live USGS run on a dry afternoon correctly produced no advisories, which
-   is the honest result and demonstrates nothing about the notification path.
+9. **The sensor input to the end-to-end demonstration was synthetic. Everything
+   downstream of it was real.** No flooding occurred anywhere in the capture
+   window, so no genuine reading would cross a detection threshold. The pipeline
+   was therefore exercised with synthetic readings from
+   `data/replay.example.json`, a four-frame progression written for interface
+   testing, replayed through the live production stack.
+
+   That needs stating precisely, because "replay data" covers three different
+   situations and they are not equivalent. This was **not** a recording of a
+   real storm, and it was **not** live gage data with the detection threshold
+   lowered until something tripped, which `DEMO.md` explicitly warns against
+   screenshotting. It was fabricated depth values on five fabricated sensor ids
+   in the `demo:` namespace, injected at the very top of the pipeline.
+
+   From that injection point onward nothing was simulated. SQS carried every
+   message under at-least-once delivery. The correlator wrote through the real
+   idempotency gate into RDS. PostGIS executed the actual `ST_ClusterDBSCAN`
+   over real geometry and returned real hulls. The dispatcher applied the real
+   advisory ladder, wrote real immutable audit objects to S3, and published to
+   SNS, which returned message ids now recorded in the `advisories` table.
+
+   The distributed system is real, and the distributed system is what this
+   assignment grades. The weather is synthetic, and the weather is not something
+   I control. A live USGS run on the same afternoon correctly produced zero
+   advisories, which is the honest result for a dry day and demonstrates nothing
+   whatsoever about the notification path.
 
 ---
 

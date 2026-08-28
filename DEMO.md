@@ -99,6 +99,45 @@ aws sns subscribe --topic-arn "$CURBLINE_SNS_TOPIC" \
 The rubric awards 30 points for demonstrating end-to-end function and says it is
 on you to provide enough screenshots to prove it. Capture all of these.
 
+---
+
+#### Run this FIRST, before any other capture
+
+Every other item in this checklist records state that already exists. This one
+can still find a defect, so it runs while there is time to act on the result.
+It is fully reversible, which is a convenience and not the reason for the
+ordering.
+
+```bash
+CACHE_SG=$(jq -r .security_groups.cache infra/stack.json)
+APP_SG=$(jq -r .security_groups.app infra/stack.json)
+
+aws ec2 revoke-security-group-ingress   --group-id "$CACHE_SG" --protocol tcp --port 6379 --source-group "$APP_SG"
+sudo systemctl restart curbline-api        # force a fresh connect attempt
+# screenshot: console still working, cache pip amber, /api/health degraded
+
+aws ec2 authorize-security-group-ingress   --group-id "$CACHE_SG" --protocol tcp --port 6379 --source-group "$APP_SG"
+sudo systemctl restart curbline-api
+# confirm pip returns green before continuing
+```
+
+**The restart is not optional.** Security groups are stateful. An already
+established Redis connection can survive the revoke through connection tracking,
+so without a restart the API keeps using a socket that the new rule would never
+have permitted. The test would pass and demonstrate nothing. Restarting forces a
+fresh connect that has to clear the revoked rule.
+
+**Expect the console to feel slower while degraded.** Every broadcast tick now
+absorbs a `socket_connect_timeout` before falling through to Postgres. That
+latency is the degradation path working, not a second fault, and it is worth
+capturing rather than hiding.
+
+**Confirm green before continuing.** The remaining captures assume a healthy
+cache, and a status bar still showing amber will contradict the cache hit rate
+screenshot two items later.
+
+---
+
 **Cloud integration (10 pts)**
 - [ ] RDS console: instance `curbline-db`, status Available, engine PostgreSQL
 - [ ] ElastiCache console: cluster `curbline-cache`, status Available
@@ -130,14 +169,54 @@ on you to provide enough screenshots to prove it. Capture all of these.
 - [ ] `curl /api/health` output
 
 **Deliberate failure, which is worth more than it costs**
-- [ ] Stop ElastiCache, reload the console, show it still working with the cache
-      pip amber. This demonstrates the degradation path rather than claiming it.
+- [ ] Cache unreachable: console still serving, pip amber, `/api/health`
+      degraded. Procedure is "Run this FIRST" above; do not leave it until last.
 
 ### Report
 
 Fill in `docs/REPORT.md`. It is 15 points and takes longer than you think.
 
 ### Push and tear down
+
+### Pre-teardown checklist
+
+**Teardown is irreversible, and re-provisioning costs about twenty minutes plus
+RDS creation time.** Anything missing after this point is unrecoverable inside
+the deadline. Walk this against files on disk, not against a memory of having
+taken them.
+
+**Captures that require live AWS. Open each file and confirm it is legible.**
+
+- [ ] Six console screenshots: RDS, ElastiCache, SQS, SNS, S3, EC2
+- [ ] Cache-unreachable pair: degraded with amber pip, and healthy again after
+      re-authorising
+- [ ] `systemctl status 'curbline-*'` with four units active
+- [ ] Three `journalctl` views: collector, correlator, dispatcher
+- [ ] SQS queue depth non-zero
+- [ ] `redis-cli INFO keyspace`
+- [ ] `curl /api/health`
+- [ ] `SELECT PostGIS_Full_Version();`
+- [ ] `SELECT * FROM current_clusters();`
+- [ ] `aws s3 ls` of `advisories/`, plus one audit object opened and readable
+- [ ] `advisories` rows showing `sns_message_id` and `audit_key`
+- [ ] Duplicate-delivery replay: same `ingest_id`, one row before and after
+- [ ] Console: zero zones, active zone, before and after depth change
+- [ ] Console: status bar showing cache hit rate
+- [ ] SNS email, or the written reason it could not be captured
+
+**Anything unobtainable is recorded, not silently dropped.** Put the reason in
+the Appendix C row. A reader who sees "not captured, no NWS flood alert was
+active in the study area during the window" learns something real about the
+limits of the demonstration. A row that simply vanishes reads as an oversight.
+
+**Repository state.**
+
+- [ ] `git status` clean; `.env` and `infra/stack.json` not listed
+- [ ] Screenshots committed, or deliberately excluded and stored elsewhere
+- [ ] Appendix C File and Source columns filled for every captured row
+- [ ] `docs/REPORT.md` has no bracketed placeholder remaining
+
+**Only when every line above is ticked:**
 
 ```bash
 git status                       # confirm .env is NOT listed

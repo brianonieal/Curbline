@@ -217,3 +217,34 @@ decisions recorded in CSS comments rather than DESIGN_SYSTEM.md.
 
 **Flips if:** this project continues past v1.0.0 into Phase B. At that point
 run the missing gates properly rather than compounding the deviation.
+
+---
+
+## D-013 — Prove cache degradation by revoking the security group rule, not by deleting the cluster
+**Date:** 2026-08-28 | **Status:** ACTIVE | **Gate:** v0.5.0
+
+`DEMO.md` originally said "stop ElastiCache". An ElastiCache cluster cannot be
+stopped, only deleted, so in practice that instruction resolved to deleting it.
+The two are not the same test.
+
+Deleting the cluster removes its DNS record, so the next connect fails on name
+resolution. Revoking tcp/6379 from the app security group leaves the cluster and
+its DNS intact and makes it unreachable over the network, so the connect fails
+on timeout. `cache.py` claims to survive an unreachable cache, and the timeout
+path is the one it actually documents. Test the failure the code claims to
+handle, not a neighbouring one that happens to be easier to cause.
+
+**Rejected:** delete and recreate. Exercises a different failure, costs a
+recreation, and cannot be undone inside a demo window. Reversibility is a real
+benefit of the revoke but it is the secondary reason, not the reason.
+
+**Cost accepted:** the revoke must be paired with `systemctl restart
+curbline-api`. Security groups are stateful, so an already established Redis
+connection can survive the revoke through connection tracking and the capture
+would pass while demonstrating nothing. The restart forces a fresh connect that
+has to clear the revoked rule. This is a procedural step that is easy to omit
+and silently invalidates the evidence when omitted.
+
+**Flips if:** `cache.py` ever resolves the cache endpoint per call rather than
+holding a pooled connection. DNS failure then becomes a reachable path and both
+tests are worth running.
