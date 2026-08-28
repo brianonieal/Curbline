@@ -11,9 +11,16 @@ graded advisories with an immutable audit trail.
 
 ## The problem
 
-Hurricane Ida killed eleven people in New York City basements in September 2021.
-The gap was not rainfall data. It was street-level water depth, aggregated into
-something a dispatcher could act on, in time to act.
+The remnants of Hurricane Ida caused fourteen injury deaths in New York City on
+1 and 2 September 2021, thirteen of them directly. Drowning in an unregulated
+basement apartment was the most common circumstance, at 71%, and 79% of the
+decedents lived in Queens.<sup>[1]</sup> The gap was not rainfall data. It was
+street-level water depth, aggregated into something a dispatcher could act on,
+in time to act.
+
+<sup>[1]</sup> Yuan, Spira-Cohen, Olson and Lane, NYC Department of Health and
+Mental Hygiene, *Disaster Medicine and Public Health Preparedness* 18 (2024),
+article e55, DOI 10.1017/dmp.2024.49. See `docs/REPORT.md` section 1.
 
 A single sensor reporting eight centimetres of water is a reading. Four adjacent
 sensors reporting water simultaneously is a flooding street, and those are

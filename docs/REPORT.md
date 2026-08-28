@@ -10,13 +10,15 @@
 ## 1. Problem and business value
 *Rubric: Real-World Problem Relevance, 10 pts*
 
-On 1 September 2021 the remnants of Hurricane Ida dropped more rain on New York
-City in an hour than the sewer system was built to carry. Thirteen people in the
-city died in the immediate flooding, and eleven of them drowned in basement
-apartments.[^ida] A systematic review of the death records found drowning in
-unregulated basement units to be the most common circumstance, and named the
-suddenness of onset and inadequate exits as recurring themes. The failure was
-not a shortage of rainfall data. Radar, gauges and forecasts all showed the storm. What nobody had
+On 1 and 2 September 2021 the remnants of Hurricane Ida dropped more rain on New
+York City in an hour than the sewer system was built to carry. A review of death
+records by the New York City Department of Health and Mental Hygiene identified
+fourteen Ida-related injury deaths in the city, thirteen of them caused directly
+by the storm.[^ida] The most common circumstance of death was drowning in an
+unregulated basement apartment, at 71% of the total, and 79% of the decedents
+lived in Queens. The review named rapid nighttime flooding, inadequate exits and
+impeded emergency access as the recurring conditions. The failure was not a
+shortage of rainfall data. Radar, gauges and forecasts all showed the storm. What nobody had
 was street-level water depth aggregated into a statement an operations person
 could act on: *this block is flooding now*.
 
@@ -63,13 +65,16 @@ network against an authoritative warning feed is standard practice in
 environmental monitoring. The contribution here is that the gap between those
 two specific tools is filled, and that the output is shaped like a decision.
 
-[^ida]: Lieberman-Cribbin, W., et al. "Immediate Injury Deaths Related to the
-Remnants from Hurricane Ida in New York City, September 1-2, 2021."
-*Disaster Medicine and Public Health Preparedness*, Cambridge University Press.
-<https://www.cambridge.org/core/journals/disaster-medicine-and-public-health-preparedness/article/immediate-injury-deaths-related-to-the-remnants-from-hurricane-ida-in-new-york-city-september-12-2021/69BD8C527FD016A2CAC703C7023B2251>
-The eleven basement-apartment figure was also given by the Mayor's office at the
-time and is widely reported in contemporaneous coverage. The peer-reviewed
-record review is cited here because it is the source that survives scrutiny.
+[^ida]: Yuan, A., Spira-Cohen, A., Olson, C., and Lane, K. "Immediate Injury
+Deaths Related to the Remnants From Hurricane Ida in New York City, September
+1-2, 2021." *Disaster Medicine and Public Health Preparedness*, vol. 18, 2024,
+article e55. DOI 10.1017/dmp.2024.49. Authors are with the Bureau of
+Environmental Surveillance and Policy, New York City Department of Health and
+Mental Hygiene.
+Contemporaneous September 2021 reporting gave thirteen deaths with eleven in
+basement apartments. Those figures predate the medical examiner review and are
+superseded by it, which is normal for disaster tolls. The reviewed figures are
+used here throughout.
 
 ---
 
