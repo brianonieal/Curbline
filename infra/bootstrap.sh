@@ -34,7 +34,10 @@ python3 -m venv .venv
 
 # Load the schema. Screenshot the PostGIS version line that this prints.
 set -a; source .env; set +a
-PGPASSWORD="$CURBLINE_DB_PASSWORD" psql \
+# -P pager=off because psql pages a wide result set when stdout is a tty, and
+# the PostGIS version row is very wide. Without it this script blocks on less
+# waiting for a keypress, which is invisible in an unattended run. See E-012.
+PGPASSWORD="$CURBLINE_DB_PASSWORD" psql -P pager=off \
   -h "$CURBLINE_DB_HOST" -U "$CURBLINE_DB_USER" -d "$CURBLINE_DB_NAME" \
   -f sql/schema.sql
 

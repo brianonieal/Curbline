@@ -240,6 +240,29 @@ argument for provisioning in a clean account at least once before the demo.
 
 ---
 
+## E-012 — bootstrap.sh stops silently after the schema loads
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** minutes, and it would have been unbounded in an unattended run
+
+**Symptom:** the schema load prints the PostGIS version row and the script
+appears to finish, except the systemd units never install and the prompt never
+returns. The terminal shows `(END)`.
+
+**Root cause:** `psql` pages output through `less` when stdout is a tty, and the
+`postgis_full_version` row is wide enough to trigger it. The script was not
+hung, it was blocked on a keypress. Run from `bootstrap.sh` this is easy to read
+as completion, because the line it prints is the line you were told to look for.
+
+**Fix:** `psql -P pager=off` in `bootstrap.sh`. The row still prints, it just
+does not page.
+
+**Prevention:** any interactive-by-default tool inside a provisioning script
+needs its interactivity turned off explicitly, not by luck of the terminal.
+`psql` is the obvious one here. The general test is whether the script would
+complete with no human watching it, which is also the condition under which a
+block like this is invisible rather than merely annoying.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 
