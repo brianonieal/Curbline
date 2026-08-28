@@ -10,6 +10,7 @@ If it does not, the pipeline runs unchanged on USGS gauge data.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,7 @@ from typing import Any, Iterable, Protocol
 
 import requests
 
-from . import config
+from . import cache, config
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class USGSSource:
     FT_TO_CM = 30.48
     BASELINE_DAYS = 14
     BASELINE_PERCENTILE = 0.10
+    BASELINE_RETRY_SECONDS = 600
 
     def __init__(self, bbox: tuple[float, float, float, float]) -> None:
         self.bbox = bbox
@@ -113,8 +115,12 @@ class USGSSource:
             "Accept": "application/geo+json",
             "User-Agent": config.NWS_USER_AGENT,
         })
-        # site id -> baseline gage height in feet. Resolved once per process.
+        # site id -> baseline gage height in feet. A read-through in front of
+        # Redis, not the system of record: this process losing it costs a
+        # lookup, not a datum. See resolve_baseline.
         self._baseline: dict[str, float] = {}
+        # site id -> monotonic time before which not to retry a failed lookup.
+        self._baseline_retry_after: dict[str, float] = {}
 
     def _fetch_baseline(self, site: str) -> float | None:
         """Low-water datum for one site, from its own recent history."""
@@ -151,19 +157,43 @@ class USGSSource:
         values.sort()
         return values[int(len(values) * self.BASELINE_PERCENTILE)]
 
-    def baseline_for(self, site: str, current_ft: float) -> float:
+    def resolve_baseline(self, site: str) -> float | None:
         """
-        Cached baseline, falling back to the current reading if history is
-        unavailable. That fallback yields a rise of zero rather than a false
-        alarm, which is the safe direction to fail for a detection system.
+        The low-water datum for a site: process memory, then Redis, then the
+        USGS history API. None means it could not be established.
+
+        This used to fall back to the current reading, which makes the rise
+        exactly zero. That reads as a safe default and is one only on a dry
+        start. During a storm it inverts: the collector restarts, the history
+        fetch blips, the datum pins to an already-elevated reading, and that
+        site reports no rise for the life of the process. The system then
+        suppresses the flood it exists to detect while displaying a confident
+        number. Persisting the datum removes the restart half; returning None
+        removes the fabrication half. See E-026.
         """
-        if site not in self._baseline:
-            resolved = self._fetch_baseline(site)
-            self._baseline[site] = (resolved if resolved is not None
-                                    else current_ft)
-            log.info("baseline for %s: %.2f ft%s", site, self._baseline[site],
-                     "" if resolved is not None else " (from first reading)")
-        return self._baseline[site]
+        if site in self._baseline:
+            return self._baseline[site]
+
+        stored = cache.get_baseline(site)
+        if stored is not None:
+            self._baseline[site] = stored
+            return stored
+
+        if time.monotonic() < self._baseline_retry_after.get(site, 0.0):
+            return None
+
+        fetched = self._fetch_baseline(site)
+        if fetched is None:
+            # Back off rather than re-asking on every poll for every site.
+            # Politeness toward a free public API, not an optimisation.
+            self._baseline_retry_after[site] = (
+                time.monotonic() + self.BASELINE_RETRY_SECONDS)
+            return None
+
+        self._baseline[site] = fetched
+        cache.set_baseline(site, fetched)
+        log.info("baseline for %s: %.2f ft", site, fetched)
+        return fetched
 
     def fetch(self) -> Iterable[Reading]:
         resp = self.session.get(
@@ -193,7 +223,13 @@ class USGSSource:
             site = str(props.get("monitoring_location_id")
                        or feature.get("id") or "unknown")
 
-            baseline_ft = self.baseline_for(site, current_ft)
+            baseline_ft = self.resolve_baseline(site)
+            if baseline_ft is None:
+                # Withheld, not published as zero. Without a datum there is no
+                # rise to report, and a zero here is a positive claim that this
+                # street is dry. The absence of a claim is the honest output.
+                log.warning("no baseline for %s, withholding reading", site)
+                continue
             rise_cm = max(0.0, (current_ft - baseline_ft) * self.FT_TO_CM)
 
             yield Reading(

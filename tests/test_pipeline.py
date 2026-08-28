@@ -388,6 +388,115 @@ class TestWorkerHeartbeat:
             cache.beat("collector")  # must not raise
 
 
+class TestUSGSBaselinePersistence:
+    """
+    Limitation 10, now E-026. The baseline is the datum the whole USGS reading
+    is measured against. It lived in one process's memory, and when the history
+    fetch failed it silently fell back to the current reading, which yields a
+    rise of exactly zero.
+
+    On a dry first start that is the safe direction and is why it was written
+    that way. During a storm it inverts: a restart plus a failed fetch pins the
+    datum to an already-elevated reading and that site reports no rise for the
+    life of the process. The failure suppresses the event the system exists to
+    detect, and reports a confident number while doing it.
+    """
+
+    def _source(self):
+        from curbline.sources import USGSSource
+        return USGSSource((-74.3, 40.4, -73.6, 41.0))
+
+    def test_a_stored_baseline_is_reused_without_refetching(self):
+        src = self._source()
+        with mock.patch("curbline.cache.get_baseline", return_value=2.5) as get, \
+             mock.patch.object(src, "_fetch_baseline") as fetch:
+            assert src.resolve_baseline("01300000") == 2.5
+        get.assert_called_once()
+        fetch.assert_not_called(), "a persisted baseline must survive a restart"
+
+    def test_a_fetched_baseline_is_persisted(self):
+        src = self._source()
+        with mock.patch("curbline.cache.get_baseline", return_value=None), \
+             mock.patch("curbline.cache.set_baseline") as put, \
+             mock.patch.object(src, "_fetch_baseline", return_value=1.75):
+            assert src.resolve_baseline("01300000") == 1.75
+        put.assert_called_once_with("01300000", 1.75)
+
+    def test_an_unresolvable_baseline_returns_none_not_the_current_reading(self):
+        """
+        The heart of it. No baseline means no rise can be computed. Returning
+        the current reading manufactures a zero, which is a positive claim that
+        the street is dry.
+        """
+        src = self._source()
+        with mock.patch("curbline.cache.get_baseline", return_value=None), \
+             mock.patch("curbline.cache.set_baseline"), \
+             mock.patch.object(src, "_fetch_baseline", return_value=None):
+            assert src.resolve_baseline("01300000") is None
+
+    def test_a_reading_with_no_baseline_is_not_emitted(self):
+        """
+        A reading we cannot measure is withheld rather than published as zero.
+        Absence of a claim, not a claim of dryness.
+        """
+        src = self._source()
+        payload = {"features": [{
+            "geometry": {"coordinates": [-73.9, 40.7]},
+            "properties": {"value": "8.0", "time": "2026-08-28T12:00:00+00:00",
+                           "monitoring_location_id": "01300000",
+                           "monitoring_location_name": "Test Creek"},
+        }]}
+        resp = mock.MagicMock()
+        resp.json.return_value = payload
+        with mock.patch.object(src.session, "get", return_value=resp), \
+             mock.patch.object(src, "resolve_baseline", return_value=None):
+            assert list(src.fetch()) == []
+
+    def test_a_reading_with_a_baseline_is_emitted_as_rise(self):
+        src = self._source()
+        payload = {"features": [{
+            "geometry": {"coordinates": [-73.9, 40.7]},
+            "properties": {"value": "8.0", "time": "2026-08-28T12:00:00+00:00",
+                           "monitoring_location_id": "01300000",
+                           "monitoring_location_name": "Test Creek"},
+        }]}
+        resp = mock.MagicMock()
+        resp.json.return_value = payload
+        with mock.patch.object(src.session, "get", return_value=resp), \
+             mock.patch.object(src, "resolve_baseline", return_value=6.0):
+            readings = list(src.fetch())
+        assert len(readings) == 1
+        # 2 ft of rise, in cm.
+        assert readings[0].depth_cm == pytest.approx(60.96)
+
+    def test_repeated_failures_do_not_refetch_every_poll(self):
+        """
+        A site with no history would otherwise hit the USGS API on every poll
+        for every site, forever. The backoff is politeness toward a free public
+        API, not an optimisation.
+        """
+        src = self._source()
+        with mock.patch("curbline.cache.get_baseline", return_value=None), \
+             mock.patch.object(src, "_fetch_baseline", return_value=None) as fetch:
+            src.resolve_baseline("01300000")
+            src.resolve_baseline("01300000")
+            src.resolve_baseline("01300000")
+        assert fetch.call_count == 1, "failed lookups must back off"
+
+    def test_an_unreachable_cache_still_resolves_by_fetching(self):
+        """Redis being down slows this down; it must not break it."""
+        import redis
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.get.side_effect = redis.RedisError("down")
+        fake.setex.side_effect = redis.RedisError("down")
+        src = self._source()
+        cache._client = None
+        with mock.patch.object(cache, "client", return_value=fake), \
+             mock.patch.object(src, "_fetch_baseline", return_value=3.0):
+            assert src.resolve_baseline("01300000") == 3.0
+
+
 class TestHealthVerdict:
     """E-023: /api/health returned ok with every graded component stopped."""
 

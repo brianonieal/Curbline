@@ -701,6 +701,58 @@ parameters and this is the source" is.
 
 ---
 
+## E-026 - A collector restart mid-storm silently stops detecting at that site
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit; would have been near-impossible to diagnose from a demo
+
+**Symptom:** a USGS site reports `depth_cm = 0.0` continuously while the gauge
+is visibly elevated. No error, no warning on the dashboard, no exception. The
+site renders as a normal dry sensor.
+
+**Root cause:** `USGSSource` reports rise above a per-site baseline, and that
+baseline lived in one dictionary in the collector's memory, resolved once per
+process and never persisted. When the history fetch failed, the code fell back
+to **the current reading**, which makes the rise exactly zero by construction.
+
+The fallback was deliberate and its reasoning was written down: a rise of zero
+rather than a false alarm is the safe direction for a detector. That reasoning
+holds on a dry start and inverts during a storm. `Restart=always` with
+`RestartSec=5` restarts the collector, the baseline fetch blips (a 30 second
+timeout, a USGS 5xx, or simply fewer than 10 history records), and the datum
+pins to an already-elevated reading. That site then reports no rise for the life
+of the process, and the failure direction is suppression of the exact event the
+system exists to detect.
+
+Second-order: `readings` has no column for the datum, so rows written either
+side of a restart are measured against different baselines and `current_clusters()`
+compares them to each other as if they were the same quantity.
+
+**Fix:** two independent halves, because the defect had two.
+
+- **Persistence removes the restart.** Baselines are written to Redis under
+  `baseline:<site>` with a seven day TTL, and `resolve_baseline` reads process
+  memory, then Redis, then the history API. A restart now inherits the datum.
+  The TTL is a correctness feature rather than hygiene: it bounds how stale a
+  datum can get after a river channel changes.
+- **Returning None removes the fabrication.** No baseline means no rise can be
+  computed, so `fetch()` withholds the reading instead of publishing a zero. A
+  zero is a positive claim that the street is dry, and that claim was not
+  supported by anything. The absence of a claim is the honest output.
+
+Failed lookups back off for ten minutes rather than re-asking on every poll for
+every site, which is politeness toward a free public API rather than an
+optimisation.
+
+**Prevention:** "fails safe" deserves the same scrutiny as any other claim, and
+the question to ask is *safe under which conditions*. This fallback was
+genuinely safe on a dry start and dangerous during a storm, which is the only
+time the system matters. A default chosen against the quiet case is not a safe
+default; it is an untested one. The related rule: a value that defines what
+every other measurement from a source *means* is not cache, it is state, and
+state that only exists in one process's memory will be wrong after the first
+restart.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

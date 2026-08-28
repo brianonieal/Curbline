@@ -212,6 +212,45 @@ def worker_liveness() -> dict[str, bool | None]:
     return {w: v is not None for w, v in zip(WORKERS, raw)}
 
 
+# ---------------------------------------------------------------------------
+# USGS baselines. Not cache entries in the read-through sense: losing one costs
+# a history refetch, but a *wrong* one silently changes what every reading from
+# that site means. Kept here because this module owns the Redis connection.
+# ---------------------------------------------------------------------------
+
+# Long, because the low-water datum of a river moves on a seasonal timescale and
+# a refetch costs a 500-record API call. Expiry is a correctness feature, not
+# just hygiene: it bounds how stale a datum can get after a channel changes.
+BASELINE_TTL_SECONDS = 7 * 24 * 3600
+
+
+def get_baseline(site: str) -> float | None:
+    """The persisted low-water datum for a site, or None if unavailable.
+
+    Deliberately does not touch STATS. These are not sensor-metadata reads and
+    counting them would inflate the hit rate the dashboard reports.
+    """
+    try:
+        raw = client().get(f"baseline:{site}")
+    except redis.RedisError as exc:
+        log.warning("baseline read failed for %s: %s", site, exc)
+        return None
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        log.warning("corrupt baseline for %s: %r", site, raw)
+        return None
+
+
+def set_baseline(site: str, feet: float) -> None:
+    try:
+        client().setex(f"baseline:{site}", BASELINE_TTL_SECONDS, repr(float(feet)))
+    except redis.RedisError as exc:
+        log.warning("baseline write failed for %s: %s", site, exc)
+
+
 def healthy() -> bool:
     try:
         return bool(client().ping())

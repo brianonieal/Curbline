@@ -55,20 +55,28 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-026.** A collector restart mid-storm silently stopped detection at a
+  site. The USGS baseline lived only in process memory and fell back to the
+  current reading when the history fetch failed, making the rise exactly zero.
+  Baselines now persist to Redis, and a site whose datum cannot be established
+  has its readings withheld rather than published as a confident zero.
 
 E-014, E-022 and E-025 are the same defect in three layers. D-005 said
 thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 27 tests. 31 to 58. `should_notify`, `sweep_state` and `health_status`
+- 34 tests. 31 to 65. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the
   pipeline cannot produce.
-- Limitations 10 through 12 in the report: the USGS baseline lost on restart,
-  unvalidated reading timestamps, and an audit record attesting the wrong
-  process's thresholds. All found by the audit, none fixed.
+- Limitations 10 through 12 in the report. 11 and 12 are unfixed: unvalidated
+  reading timestamps, and an audit record attesting the wrong process's
+  thresholds. 10 is now the residue of E-026 rather than the defect itself, and
+  names the trade taken: a site with no resolvable datum is absent from the map
+  instead of appearing dry, because appearing dry is a claim the system cannot
+  support and absence is not.
 - 5 tests in `TestCacheStatsTransport`. 31 to 36.
 - D-014, the cache counter transport decision, with its flip condition.
 - `docs/evidence/api-state.json` and `docs/evidence/cli/current-clusters-query.sql`

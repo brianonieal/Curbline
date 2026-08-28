@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-58 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+65 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -459,6 +459,7 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestHealthVerdict` | 5 | E-023: a stopped component degrades the system verdict; unknown liveness does not |
 | `TestRecessionIsDrivenByAbsence` | 4 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
 | `TestAdvisorySuppression` | 6 | E-021: escalation notifies even when state is unchanged; a NULL last level does not silence the first advisory |
+| `TestUSGSBaselinePersistence` | 7 | E-026: the datum survives a restart, and a site with no datum is withheld rather than reported as zero rise |
 
 **What this suite could not catch, stated rather than hidden.** The suite is
 moto throughout and never executed SQL against a real PostGIS instance or
@@ -537,7 +538,7 @@ have not yet been observed end to end on real managed services.
 Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
 nine found during the first end-to-end run against real infrastructure
 (E-009 through E-017), and six found afterwards by the boundary audit described
-in section 6.2 (E-020 through E-025). Two came from the evidence capture
+in section 6.2 (E-020 through E-026). Two came from the evidence capture
 session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
@@ -607,19 +608,21 @@ Twelve, stated plainly.
    advisories, which is the honest result for a dry day and demonstrates nothing
    whatsoever about the notification path.
 
-10. **The USGS baseline is held in the collector's memory and is lost on
-    restart.** `USGSSource` reports rise above a per-site p10 baseline resolved
-    once per process. If the history fetch fails, the baseline falls back to the
-    current reading, which yields a rise of zero. On a dry first start that is
-    the safe direction and is why it was written that way. During a storm it
-    inverts: systemd restarts the collector, the fetch blips, the baseline pins
-    to an already elevated reading, and that site reports zero rise for as long
-    as the process lives. The failure suppresses the event the system exists to
-    detect, and nothing reports it as degraded. The `readings` table has no
-    column for the datum, so rows written either side of a restart are measured
-    against different baselines and are compared to each other by the window
-    query. Fixing this means persisting the baseline per site and emitting a
-    null depth rather than a zero when it is provisional.
+10. **A USGS site with no resolvable baseline is not reported at all.** This is
+    the residue of a defect rather than the defect itself, and the trade is
+    deliberate. `USGSSource` reports rise above a per-site p10 baseline. That
+    baseline used to live only in the collector's memory and, when the history
+    fetch failed, fell back to the current reading, which makes the rise exactly
+    zero. A restart mid-storm therefore pinned the datum to an already elevated
+    reading and that site reported no rise for the life of the process, silently
+    suppressing the event the system exists to detect (E-026). Baselines are now
+    persisted to Redis so a restart inherits them, and a site whose baseline
+    cannot be established has its readings withheld rather than published as
+    zero. The cost is that such a site is absent from the map instead of
+    appearing dry. That is the intended direction: appearing dry is a positive
+    claim the system cannot support, and absence is not. A site with fewer than
+    ten history records will therefore never be reported, and nothing on the
+    dashboard currently distinguishes "no baseline" from "not deployed".
 
 11. **Reading timestamps are passed to PostgreSQL as strings and trusted.**
     `observed_at` is whatever the upstream API returned, inserted into a
@@ -664,11 +667,11 @@ a moto-only suite and both were found by a human running the system. A
 containerised Postgres is not available under this assignment's constraints, but
 a hosted instance in a test account would have caught both in minutes.
 
-**Persist the USGS baseline.** Limitation 10 is the most severe unfixed defect
-in the system, because its failure mode is silent suppression of detection
-rather than a visible error. The baseline belongs in the `sensors` table or in
-Redis with a long TTL, and a provisional baseline should produce a null depth
-rather than a confident zero.
+**Distinguish "no baseline" from "not deployed" on the map.** Persisting the
+baseline and withholding unmeasurable readings (E-026) removed a silent
+detection failure, but the console cannot currently tell an operator that a site
+is absent because its datum is unknown. That needs a fourth sensor state on the
+map, not just an absence.
 
 **Audit for defect shape rather than waiting for instances.** The six defects in
 E-020 through E-025 were found by taking three that had already occurred,
@@ -691,14 +694,14 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           58 unit tests plus fixture_clusters.sql
+tests/           65 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
-condition), `ERRORS.md` (25 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (26 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown
