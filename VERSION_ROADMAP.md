@@ -234,9 +234,10 @@ one bad surprise, not two.
 Do not start any of this before v1.0.0 closes.
 
 ## v1.1.0 — FloodNet integration
-Implement `FloodNetSource.fetch()` against the real API docs. Switch
-`CURBLINE_SOURCE` and restore the 5/10/20 cm thresholds, which were calibrated
-for exactly this measurement.
+Implement `FloodNetSource.fetch()` against the real API docs. Switching
+`CURBLINE_SOURCE` is now sufficient on its own: since E-014 the thresholds are
+derived from the configured source, so selecting `floodnet` selects 5/10/20
+automatically and there is nothing to restore by hand.
 **Exit:** live FloodNet readings producing zones; USGS still works as fallback.
 **Blocked on:** FloodNet approval. **Estimate:** 2 hrs once docs are in hand.
 
@@ -244,8 +245,42 @@ for exactly this measurement.
 Replace the membership hash in `stable_zone_id` with overlap matching against
 the previous cycle's hulls, so a zone that gains or loses one sensor stays the
 same zone.
+
+**Observed, not anticipated.** On 2026-08-28 the replay storm grew its wet set
+from three sensors to five across successive frames. One physical flood
+presented as three distinct `zone_id` values, and each one restarted the
+`forming` lifecycle from scratch, which delays every advisory by a cycle and
+makes zone history unreadable. This is the D-003 cost arriving in practice.
+
 **Exit:** a zone survives a membership change with its `zone_id` and
 `opened_at` intact; test added asserting it. **Estimate:** 4 hrs.
+
+## v1.2.5 — Integration tests against a real PostgreSQL
+
+Run the schema, both stored functions and the worker database paths against a
+live PostgreSQL and PostGIS instance in CI, rather than only against moto and a
+stubbed database layer.
+
+**Why this sits ahead of the rest of Phase B rather than after it.** E-013 and
+E-017 were both invisible to the current suite and both broke the system in
+production while every test stayed green. E-013 was a psycopg type mapping
+PostgreSQL refused to resolve during function lookup. E-017 was a `UUID` column
+compared against a JSON string, which meant no advisory had ever been issued in
+any run. Neither is reachable without executing real SQL. Every remaining Phase
+B gate modifies the database layer, so continuing to build on an unverified one
+reproduces the same class of failure at higher cost.
+
+**Exit:** `tests/fixture_clusters.sql` runs in CI rather than by hand, and a
+test exercises `current_clusters()` and `db.open_zones()` against real PostGIS
+asserting the returned **types**, not only the values.
+
+**Constraint note:** containers are banned for the graded deliverable, so this
+runs against a hosted instance in a test account rather than a local Postgres
+container. That is a cost, and it is smaller than the cost already paid.
+
+**Estimate:** 4 hrs.
+
+---
 
 ## v1.3.0 — Threshold calibration
 Validate detection against ground truth. Join historical zones against NYC 311
