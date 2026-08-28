@@ -70,12 +70,12 @@ instance returns an assumed-role ARN.
 **Not in scope:** any application logic, any UI work.
 
 **Exit criteria**
-- [ ] `psql -c "SELECT PostGIS_Full_Version();"` succeeds from EC2
-- [ ] `redis-cli -h $CURBLINE_CACHE_HOST ping` returns PONG from EC2
-- [ ] All four SQS queues exist and are listable
+- [x] `psql -c "SELECT PostGIS_Full_Version();"` succeeds from EC2
+- [x] `redis-cli -h $CURBLINE_CACHE_HOST ping` returns PONG from EC2
+- [x] All four SQS queues exist and are listable
 - [ ] SNS topic exists with a confirmed email subscription
-- [ ] S3 audit bucket exists with public access blocked
-- [ ] `http://<instance-ip>:8000` is reachable from Brian's browser
+- [x] S3 audit bucket exists with public access blocked
+- [x] `http://<instance-ip>:8000` is reachable from Brian's browser
 - [ ] Console screenshot captured for each of the six services
 
 **Estimate:** 2 to 5 hours. The spread is the point.

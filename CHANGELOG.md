@@ -7,21 +7,77 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow
 
 ## [Unreleased]
 
-Process only. No source changes.
+Nothing yet. v0.6.0 opens on pipeline behaviour.
+
+---
+
+## [0.5.0] — 2026-08-28
+
+Infrastructure live. First execution of the pipeline against real managed
+services: RDS PostgreSQL 18 with PostGIS 3.6.3, ElastiCache, SQS, SNS, S3 and
+EC2. Nine defects found and fixed. None was reachable by the existing test
+suite, because the suite is moto throughout and had never run SQL against
+PostGIS or exercised the dispatcher's database types.
+
+### Added
+- `infra/account-setup.sh`. The one-time account bootstrap `SETUP.md` described
+  as unscriptable. Runs in CloudShell so no long-lived access key is created,
+  and launches the probe instance before the IAM work so a new-account
+  verification hold or a zero vCPU quota surfaces in the first minute.
+- `config.thresholds_for(source)`. D-005 was logged on 2026-08-27 and never
+  implemented.
+- `TestSourceCalibration`, `TestZoneLookupTypes`, `TestSensorCacheDivergence`.
+  26 tests to 31.
+- v0.5.0 recall questions in `RETENTION.md`.
+
+### Fixed
+- **E-009** Ubuntu 24.04 dropped `awscli` from its archive; `bootstrap.sh` now
+  installs CLI v2 from AWS directly.
+- **E-010** The policy granted `s3:PutPublicAccessBlock`, an operation name that
+  is not an IAM action. IAM validates neither, so it applied and authorized
+  nothing.
+- **E-011** A fresh account has no RDS or ElastiCache service-linked role. RDS
+  reports that as "Missing necessary credentials", which points at the caller.
+- **E-012** `psql` paged the PostGIS version row and blocked the script on a
+  keypress, immediately after printing the line the operator was told to expect.
+- **E-013** `double precision` to `numeric` is an assignment cast, not an
+  implicit one, so `current_clusters(...)` was reported as nonexistent when it
+  existed.
+- **E-014** `SOURCE` defaulted to `usgs` while thresholds defaulted to FloodNet's
+  5/10/20, contradicting D-005. The first live dashboard read 17 of 28 sensors
+  wet at 151.8 cm. `api/server.py` was sending three of the four thresholds as
+  literals and needed the same fix.
+- **E-015** `systemctl enable --now` does not restart a running unit, so after a
+  reboot the workers held an RDS endpoint that teardown had deleted.
+- **E-016** The sensor upsert was gated on a Redis hit, so a cache that outlived
+  its rows made every insert violate a foreign key, forever, under redelivery.
+- **E-017** The dispatcher keyed its previous-state lookup on `uuid.UUID` values
+  from the database and looked them up with the string from the queue. No zone
+  ever left `forming`, so no advisory had ever been built, audited to S3 or
+  published to SNS in any run of this system.
 
 ### Changed
+- `scripts/gate-check.sh` enumerates with `git ls-files` instead of walking the
+  filesystem. It was reporting three hard blocks, all of them `moto` and
+  `botocore` inside `.venv`.
 - D-001's flip condition. It fired on "EC2 cannot reach RDS by end of build day
   one," which priced a data-layer rewrite as a swap. It now fires only if a
   second RDS in the default VPC security group still refuses an EC2 host in that
   same group.
 - v0.5.0's abort condition is now a five-rung connectivity ladder. Rung 3, adding
   the default VPC security group to RDS and ElastiCache, removes the likeliest
-  failure cause in about two minutes and did not exist in any earlier version of
-  this plan.
+  failure cause in about two minutes.
+- Shell scripts are mode 755. They were committed 644, so a fresh clone failed
+  on `./infra/bootstrap.sh`.
+
+### Security
+- `*.pem` and `files.zip` added to `.gitignore`. The EC2 private key was sitting
+  untracked in the working tree with nothing preventing `git add -A`.
+- AWS account id removed from `COSTS.md` before the repo was published.
 
 ### Note
-Repo initialized under git at v0.4.1. 26 tests verified passing on Python
-3.14.7, previously an assertion in MANIFEST.txt rather than an observation.
+Repo initialized under git at v0.4.1. Published at
+https://github.com/brianonieal/Curbline on 2026-08-28.
 
 ---
 
