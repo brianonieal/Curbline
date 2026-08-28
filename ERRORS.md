@@ -421,6 +421,63 @@ account before this fix. Every prior demonstration showed zone detection only.
 
 ---
 
+## E-018 - An empty regional API result read as proof of deletion
+**Found:** 2026-08-28, v0.5.0 | **Status:** FIXED | **Cost:** a false all-clear on a live stack, and roughly four hours of unnoticed RDS and ElastiCache billing
+
+**Symptom:** a status probe reported the entire stack gone and teardown complete.
+EC2, RDS, ElastiCache, SQS, SNS and the security groups all returned empty. Only
+the S3 bucket and the IAM role appeared to survive, which was read as teardown
+having errored on the bucket.
+
+**Root cause:** the workstation AWS CLI had no region set in the environment and
+`us-east-2` in its config file. Every regional call went to Ohio, where nothing
+had ever been built. S3 `ListBuckets` and IAM are not regional, which is exactly
+why those two answered correctly and made the result look coherent rather than
+broken. The us-east-1 stack was running the whole time.
+
+**Fix:** `aws configure set region us-east-1` on the workstation. CLAUDE.md now
+carries the rule in its traps section.
+
+**Prevention:** an empty result from a regional API is not evidence of absence.
+It is evidence of absence **in the region you asked**. Before concluding that
+anything is gone, print the region and confirm it. The tell here was available
+and missed: a probe claiming everything was deleted, while two non-regional
+services reported healthy resources that teardown should also have removed.
+
+Second-order lesson: verify a teardown by looking at the console in a known
+region, or at a screenshot, not by a CLI query whose region you have not
+checked. This is the second false read on stack state in one day.
+
+---
+
+## E-019 - Dashboard cache hit rate is structurally always zero
+**Found:** 2026-08-28, v0.5.0 | **Status:** OPEN, known limitation | **Cost:** one v0.7.0 exit criterion that cannot be met as written
+
+**Symptom:** `/api/state` reports `"cache": {"hits": 0, "misses": 0,
+"hit_rate": null, "reachable": true}` on a system that has processed over a
+thousand readings through a working cache.
+
+**Root cause:** `cache.STATS` is a module-level dictionary, so it counts only
+what the process holding it has done. `cache.sensor()` is called exclusively by
+`workers/correlator.py`. `api/server.py` reads `cache.STATS` and serves it to
+the dashboard without ever calling the cache itself, so it is reporting its own
+counters, which are always empty. The correlator has the real numbers and no way
+to publish them.
+
+**Fix:** none yet. The honest options are to publish the counters through Redis
+under a shared key, or to have the correlator write them to a stats table the
+API reads. Both are v1.x work.
+
+**Prevention:** a metric displayed by one process about work performed by
+another needs a transport. This one silently reported a plausible-looking zero
+instead of failing, which is the harder version of the bug.
+
+**Consequence for v0.7.0:** the exit criterion "Status bar shows a non-zero
+cache hit rate" cannot be satisfied by capture. It is recorded as unmet with
+this cause rather than left looking like a missing screenshot.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

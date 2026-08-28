@@ -1,0 +1,41 @@
+{
+    "CacheClusters": [
+        {
+            "CacheClusterId": "curbline-cache",
+            "ClientDownloadLandingPage": "https://console.aws.amazon.com/elasticache/home#client-download:",
+            "CacheNodeType": "cache.t3.micro",
+            "Engine": "redis",
+            "EngineVersion": "7.1.0",
+            "CacheClusterStatus": "available",
+            "NumCacheNodes": 1,
+            "PreferredAvailabilityZone": "us-east-1c",
+            "CacheClusterCreateTime": "2026-08-28T15:13:09.521000+00:00",
+            "PreferredMaintenanceWindow": "wed:04:30-wed:05:30",
+            "PendingModifiedValues": {},
+            "CacheSecurityGroups": [],
+            "CacheParameterGroup": {
+                "CacheParameterGroupName": "default.redis7",
+                "ParameterApplyStatus": "in-sync",
+                "CacheNodeIdsToReboot": []
+            },
+            "CacheSubnetGroupName": "curbline-cache-subnets",
+            "AutoMinorVersionUpgrade": true,
+            "SecurityGroups": [
+                {
+                    "SecurityGroupId": "sg-01b0186444d690640",
+                    "Status": "active"
+                }
+            ],
+            "SnapshotRetentionLimit": 0,
+            "SnapshotWindow": "09:30-10:30",
+            "AuthTokenEnabled": false,
+            "TransitEncryptionEnabled": false,
+            "AtRestEncryptionEnabled": false,
+            "ARN": "arn:aws:elasticache:us-east-1:<account-id>:cluster:curbline-cache",
+            "ReplicationGroupLogDeliveryEnabled": false,
+            "LogDeliveryConfigurations": [],
+            "NetworkType": "ipv4",
+            "IpDiscovery": "ipv4"
+        }
+    ]
+}

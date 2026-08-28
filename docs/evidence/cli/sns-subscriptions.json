@@ -1,0 +1,11 @@
+{
+    "Subscriptions": [
+        {
+            "SubscriptionArn": "PendingConfirmation",
+            "Owner": "<account-id>",
+            "Protocol": "email",
+            "Endpoint": "<subscriber-email>",
+            "TopicArn": "arn:aws:sns:us-east-1:<account-id>:curbline-advisories"
+        }
+    ]
+}

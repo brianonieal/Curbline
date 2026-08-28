@@ -1,0 +1,17 @@
+{
+    "Attributes": {
+        "QueueArn": "arn:aws:sqs:us-east-1:<account-id>:curbline-ingest",
+        "ApproximateNumberOfMessages": "0",
+        "ApproximateNumberOfMessagesNotVisible": "0",
+        "ApproximateNumberOfMessagesDelayed": "0",
+        "CreatedTimestamp": "1787929487",
+        "LastModifiedTimestamp": "1787929487",
+        "VisibilityTimeout": "60",
+        "MaximumMessageSize": "1048576",
+        "MessageRetentionPeriod": "345600",
+        "DelaySeconds": "0",
+        "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:us-east-1:<account-id>:curbline-ingest-dlq\",\"maxReceiveCount\":5}",
+        "ReceiveMessageWaitTimeSeconds": "20",
+        "SqsManagedSseEnabled": "true"
+    }
+}

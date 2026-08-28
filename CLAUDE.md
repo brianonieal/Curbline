@@ -76,6 +76,13 @@ Full detail in `ERRORS.md`. The short version:
 5. **Security group ordering.** `provision.py` self-attaches `curbline-app` to
    its own instance via IMDSv2. Without it, RDS refuses the connection.
 6. **Port 8000 must be open** or the dashboard is unreachable from a browser.
+7. **Every `aws` call needs `us-east-1`.** Pin it with
+   `aws configure set region us-east-1`, or pass `--region us-east-1` every
+   time. An empty result from a regional API means *check the region first*, it
+   never means the resource is gone. S3 `ListBuckets` and IAM are not regional
+   and will answer correctly from anywhere, which makes a wrong-region probe
+   look coherent instead of broken. This produced a false teardown report on a
+   live, billing stack. See E-018.
 
 ---
 

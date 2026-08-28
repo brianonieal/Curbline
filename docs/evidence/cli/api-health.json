@@ -1,0 +1,16 @@
+{
+    "status": "ok",
+    "database": true,
+    "cache": true,
+    "queues": {
+        "ingest": {
+            "waiting": 0,
+            "in_flight": 0
+        },
+        "zones": {
+            "waiting": 0,
+            "in_flight": 0
+        }
+    },
+    "source": "replay"
+}
