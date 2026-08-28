@@ -481,7 +481,11 @@ isolation says nothing about whether its inputs are ever computed correctly.
 
 Full screenshot set in Appendix C. Nine defects were found and fixed during the
 first end-to-end run against real infrastructure, logged as E-009 through E-017
-in `ERRORS.md`. That file is part of the deliverable rather than an internal
+in `ERRORS.md`. Two more were identified in the evidence capture session: E-018,
+an empty regional API result misread as proof of deletion (fixed: pin
+`--region us-east-1` on every call), and E-019, a structural zero on the
+dashboard cache hit rate, an open known limitation described in section 7 and
+Appendix C. That file is part of the deliverable rather than an internal
 artifact, because the failure modes it records, an IAM action name that does not
 exist, a service-linked role a fresh account has never created, and a cache used
 as an existence oracle, are the substance of what building this taught.
@@ -586,7 +590,7 @@ docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (12 decisions, each with a flip
-condition), `ERRORS.md` (17 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (19 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown
@@ -629,43 +633,43 @@ Captures marked **usgs** are live gage data.
 
 | File | Source | Caption |
 |---|---|---|
-| | | RDS console: instance `curbline-db`, status Available, engine PostgreSQL |
-| | | ElastiCache console: cluster `curbline-cache`, status Available |
-| | | SQS console: all four queues, showing messages available |
-| | | SNS console: topic with a confirmed subscription |
-| | | S3 console: audit bucket with objects under `advisories/` |
-| | | EC2 console: the instance, with its IAM role attached |
+| `screenshots/cloud-rds.png` | aws-console | RDS console: instance `curbline-db`, status Available, engine PostgreSQL |
+| `screenshots/cloud-elasticache.png` | aws-console | ElastiCache console: cluster `curbline-cache`, status Available |
+| `screenshots/cloud-sqs.png` | aws-console | SQS console: all four queues, showing messages available |
+| `screenshots/cloud-sns.png` | aws-console | SNS console: topic with a confirmed subscription |
+| `screenshots/cloud-s3.png` | aws-console | S3 console: audit bucket with objects under `advisories/` |
+| `screenshots/cloud-ec2.png` | aws-console | EC2 console: the instance, with its IAM role attached |
 
 ### Distributed application (10 pts)
 
 | File | Source | Caption |
 |---|---|---|
-| | | `systemctl status 'curbline-*'` with all four units active |
-| | | `journalctl -u curbline-collector` showing readings published |
-| | | `journalctl -u curbline-correlator` showing clusters published |
-| | | `journalctl -u curbline-dispatcher` showing an advisory with its audit key |
-| | | SQS queue depth non-zero, which is the visible proof the stages are decoupled |
+| `screenshots/dist-systemctl.png` | cli | `systemctl status 'curbline-*'` with all four units active |
+| `screenshots/dist-collector-journal.png` | replay | `journalctl -u curbline-collector` showing readings published |
+| `screenshots/dist-correlator-journal.png` | replay | `journalctl -u curbline-correlator` showing clusters published |
+| `screenshots/dist-dispatcher-journal.png` | replay | `journalctl -u curbline-dispatcher` showing an advisory with its audit key |
+| `screenshots/dist-queue-depth.png` | replay | SQS queue depth non-zero, the visible proof the stages are decoupled |
 
 ### Technology components (15 pts)
 
 | File | Source | Caption |
 |---|---|---|
-| | | `SELECT PostGIS_Full_Version();` output |
-| | | `SELECT * FROM current_clusters();` returning real zones |
-| | | `redis-cli ... INFO keyspace` showing cached sensor keys |
-| | | The received SNS email |
-| | | One S3 audit object opened, showing the thresholds recorded alongside the decision |
+| `screenshots/tech-postgis-version.png` | cli | `SELECT PostGIS_Full_Version();` output |
+| `screenshots/tech-current-clusters.png` | replay | `SELECT * FROM current_clusters();` returning real zones |
+| `screenshots/tech-redis-keyspace.png` | replay | `redis-cli INFO keyspace` showing cached sensor keys |
+| `screenshots/tech-sns-email.png` | — | The received SNS email |
+| `screenshots/tech-s3-audit-object.png` | replay | One S3 audit object opened, showing the thresholds recorded alongside the decision |
 
 ### End-to-end (30 pts)
 
 | File | Source | Caption |
 |---|---|---|
-| | | Console with zero zones (baseline) |
-| | | Console with an active zone drawn, rail filled, advisory queued |
-| | | Same zone before and after, showing depth change on the rail |
-| | | A zone with `NWS confirmed` on the card, next to one without |
-| | | Status bar showing queue depth, cache hit rate, PostGIS up |
-| | | `curl /api/health` output |
-| | | Stop ElastiCache, reload the console, show it still working with the cache |
+| `screenshots/e2e-console-baseline.png` | usgs | Console with zero zones (baseline, live USGS run on a dry day) |
+| `screenshots/e2e-console-active-zone.png` | replay | Console with an active zone drawn, rail filled, advisory queued |
+| `screenshots/e2e-console-depth-change.png` | replay | Same zone before and after, showing depth change on the rail |
+| *(unmet)* | — | A zone with `NWS confirmed`: 0 active flood alerts in the NYC bounding box during the capture window; the corroboration path is unit-tested but not shown in a live screenshot |
+| `screenshots/e2e-console-status-bar.png` | replay | Status bar showing queue depth and PostGIS up; cache hit rate is null per E-019 (the counter lives in the correlator and is never transported to the API) |
+| `screenshots/e2e-api-health.png` | cli | `curl /api/health` output |
+| `screenshots/e2e-cache-degraded.png` | replay | Stop ElastiCache, reload the console, show it still working with the cache pip amber |
 
 *Unmet captures are listed with the reason rather than removed. See section 7.*
