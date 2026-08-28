@@ -1,78 +1,167 @@
-# Instance and role setup
+# Account setup
 
-Everything else in `infra/` assumes this is already done. It is the one part
-that is not scripted, because creating the role that lets you script things is
-the bootstrapping step.
+Everything in `infra/` assumes this is done. It is the one part that is not
+fully scripted, because creating the role that lets you script things is the
+bootstrapping step.
 
-Do this from your laptop, in the AWS console or CLI, before you touch anything
-else. Fifteen minutes.
+**Run all of this from AWS CloudShell.** CloudShell is already authenticated as
+your console identity, so no long-lived access keys are created and nothing
+sensitive lands on a laptop. Do not create root access keys to run it elsewhere.
 
-## 1. IAM role
+Every step below is idempotent. If a run fails partway, fix the cause and start
+again from step 1.
 
-```bash
-cat > trust.json <<'JSON'
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow",
- "Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}
-JSON
+---
 
-aws iam create-role --role-name curbline-ec2 \
-  --assume-role-policy-document file://trust.json
+## 0. Before you start
 
-aws iam put-role-policy --role-name curbline-ec2 \
-  --policy-name curbline --policy-document file://infra/iam-policy.json
+**Region.** Nine defaults in this repo point at `us-east-1`, including
+`curbline/config.py`, which the three workers read at runtime. Set the console
+region to **N. Virginia (us-east-1)** and keep it there. Provisioning in one
+region with an instance in another produces a failure that presents exactly like
+a security group problem, which sends you down the wrong ladder.
 
-aws iam create-instance-profile --instance-profile-name curbline-ec2
-aws iam add-role-to-instance-profile \
-  --instance-profile-name curbline-ec2 --role-name curbline-ec2
-```
+**CloudShell is per-region.** Changing the console dropdown does not move an
+already-open shell. Close CloudShell and reopen it, and confirm the tab reads
+`us-east-1`.
 
-The policy is deliberately scoped to what `provision.py`, the three workers,
-and `teardown.py` actually call. It is not `AdministratorAccess`, and being
-able to say that in the report is worth the ten extra minutes.
+**Your address.** Open `https://checkip.amazonaws.com` in a normal browser tab
+and keep the number. Not from CloudShell: CloudShell runs inside AWS and reports
+an AWS address, which is E-008. Never commit the real value.
 
-## 2. EC2 instance
+---
 
-Ubuntu 24.04, `t3.micro` (free tier), default VPC, public subnet, auto-assign
-public IP enabled. Attach the `curbline-ec2` instance profile at launch.
-
-Launch it with the **default** security group. `provision.py` creates the
-`curbline-app` group and attaches it to the running instance automatically,
-which resolves the ordering problem: the group cannot exist before the instance
-that provisions it, but the instance has to be in that group before RDS and
-ElastiCache will accept connections from it.
+## 1. Confirm where you are
 
 ```bash
-aws ec2 run-instances \
-  --image-id <ubuntu-24.04-ami-for-your-region> \
-  --instance-type t3.micro \
-  --iam-instance-profile Name=curbline-ec2 \
-  --associate-public-ip-address \
-  --key-name <your-keypair> \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=curbline}]'
+echo "account: $(aws sts get-caller-identity --query Account --output text)"
+echo "region:  ${AWS_REGION:-unset}"
 ```
 
-Look up the AMI id for your region rather than copying one; they are
-region-specific and they change.
+Region must read `us-east-1`. If it does not, reopen CloudShell.
 
-### Probe-first order, revised 2026-08-27
+---
 
-The command above assumes the role already exists. On a **new AWS account**, run
-the launch first, without `--iam-instance-profile`, and attach the profile
-afterwards with `aws ec2 associate-iam-instance-profile`. A new account can sit
-behind identity or payment verification, and can start with a low or zero vCPU
-quota in a region. Neither is a bug, both can take hours to clear, and neither
-can be compressed by working harder. Getting one instance to `running` is the
-probe that surfaces them; do it before spending time on IAM.
+## 2. Put the two files in CloudShell
 
-Two things the default security group does not give you:
+`account-setup.sh` needs `iam-policy.json` beside it. Either clone this repo:
 
-- **No inbound SSH.** The default group permits all traffic between its own
-  members and nothing from outside, so you cannot reach the box until you add
-  tcp/22 from your own address. `provision.py` opens 22 and 8000 later on
-  `curbline-app`, which is too late to verify step 3.
-- **No key pair by default.** `--key-name` must reference one that exists.
+```bash
+git clone <your-repo-url> ~/curbline && cd ~/curbline
+```
 
-## 2b. Running gate-check
+Or, if the repo is not published yet, use CloudShell **Actions, Upload file**
+once for each of `infra/account-setup.sh` and `infra/iam-policy.json`. They land
+in your home directory, which is where the script looks.
+
+The repo has to be reachable by URL before `bootstrap.sh` can run at all, since
+its documented first step on the instance is `git clone`. Publishing it now
+removes this step permanently.
+
+---
+
+## 3. Run the setup script
+
+Substitute your own address from step 0.
+
+```bash
+bash ~/account-setup.sh 203.0.113.7/32
+```
+
+It creates the key pair, launches a `t3.micro` probe instance, waits for it to
+reach `running`, creates the `curbline-ec2` role with the scoped policy, builds
+and associates the instance profile, and opens tcp/22 to your address only.
+
+The instance launches **before** the IAM work on purpose. A new-account identity
+or payment verification hold, or a zero vCPU quota in the region, both surface at
+that moment rather than after twenty minutes of setup. Neither is a bug and
+neither can be compressed by working harder, so finding out early is the point.
+
+If the launch fails with `VcpuLimitExceeded`, `PendingVerification`,
+`OptInRequired` or `Blocked`, stop. That is a quota increase or a support case,
+not something to debug.
+
+The instance-profile association retries for two minutes. IAM is eventually
+consistent and a fresh profile is routinely invisible to EC2 for a minute, with
+an error that reads like a permissions failure rather than a timing one.
+
+---
+
+## 4. Download the private key
+
+The private half of a key pair is returned **only at creation** and cannot be
+retrieved again. If you lose it you must delete the pair, create a new one, and
+relaunch the instance, because the public key is baked in at launch.
+
+CloudShell **Actions, Download file**, exact path:
+
+```
+/home/cloudshell-user/curbline.pem
+```
+
+Save it somewhere you will find again. Do this before closing the tab.
+
+---
+
+## 5. Get the connect command
+
+This prints a complete line with the real address already in it, so there is
+nothing to substitute:
+
+```bash
+echo "ssh -i curbline.pem ubuntu@$(aws ec2 describe-instances --filters Name=tag:Name,Values=curbline Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)"
+```
+
+Run the printed line from the directory holding `curbline.pem`. On Windows, if
+OpenSSH rejects the key as too permissive:
+
+```
+icacls curbline.pem /inheritance:r /grant:r "${env:USERNAME}:R"
+```
+
+---
+
+## 6. Verify the role before going further
+
+On the instance:
+
+```bash
+aws sts get-caller-identity
+```
+
+An Arn ending `assumed-role/curbline-ec2/...` means the role is working. An error
+here means `bootstrap.sh` fails on its first API call, so fix it now rather than
+halfway through provisioning.
+
+**This is the entry criterion for v0.5.0. Stop here.** Do not run `bootstrap.sh`
+in the same sitting.
+
+---
+
+## 7. Then run bootstrap
+
+```bash
+git clone <your-repo-url> ~/curbline && cd ~/curbline
+```
+
+```bash
+# CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine in step 0, not
+# from this instance. curl here returns the instance. See E-008.
+AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=203.0.113.7/32 ./infra/bootstrap.sh
+```
+
+`provision.py` creates the `curbline-app` group and attaches it to the running
+instance automatically, which resolves the ordering problem: the group cannot
+exist before the instance that provisions it, but the instance has to be in that
+group before RDS and ElastiCache accept connections from it. `attach_sg_to_self`
+appends rather than replaces, so the instance stays in the default group too,
+which is what makes rung 3 of the v0.5.0 connectivity ladder work.
+
+If your address changes, re-run with a corrected `--admin-cidr`.
+
+---
+
+## Running gate-check
 
 `scripts/gate-check.sh` defaults to bare `python3`, which will not have this
 project's dependencies and reports a **false hard block on the test suite**.
@@ -82,29 +171,19 @@ Point it at the venv:
 PYTHON=.venv/bin/python ./scripts/gate-check.sh v0.5.0
 ```
 
-Verified: bare interpreter reports 18 failed / 4 errors, venv interpreter
+Verified: bare interpreter reports 18 failed and 4 errors, venv interpreter
 reports 26 passed. The tests are fine; the interpreter was wrong.
 
-## 3. Verify the role before going further
+---
 
-SSH in and confirm the instance can act as itself:
+## If something is already half-built
 
-```bash
-aws sts get-caller-identity
-```
-
-An `arn:aws:sts::...:assumed-role/curbline-ec2/...` means the role is working.
-An error here means `bootstrap.sh` will fail on its first API call, so fix it
-now rather than halfway through provisioning.
-
-## 4. Then run bootstrap
+Everything above is safe to re-run. To see current state:
 
 ```bash
-git clone <repo> ~/curbline && cd ~/curbline
-# CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine, not
-# from this instance. curl on the instance returns the instance. See E-008.
-AWS_REGION=us-east-1 CURBLINE_ADMIN_CIDR=203.0.113.7/32 ./infra/bootstrap.sh
+aws ec2 describe-instances --filters Name=tag:Name,Values=curbline Name=instance-state-name,Values=pending,running --query 'Reservations[].Instances[].[InstanceId,State.Name,PublicIpAddress]' --output table
 ```
 
-`provision.py` opens tcp/22 and tcp/8000 to your current public address only.
-If your address changes, re-run with `--admin-cidr`.
+To start genuinely clean, terminate the instance and delete the key pair, then
+go back to step 1. The IAM role and the security group rule are harmless to
+leave in place and the script skips them if they exist.
