@@ -133,44 +133,56 @@ latency is the degradation path working, not a second fault, and it is worth
 capturing rather than hiding.
 
 **Confirm green before continuing.** The remaining captures assume a healthy
-cache, and a status bar still showing amber will contradict the cache hit rate
-screenshot two items later.
+cache, and a status bar still showing amber will contradict the status bar
+screenshot later in the set. Note that the hit rate itself reads null even on a
+healthy cache: that is E-019, a counter that lives in the correlator with no
+transport to the API, not a symptom of this test.
 
 ---
 
+Filenames are fixed here and in Appendix C of the report. Save to
+`docs/evidence/screenshots/` under exactly these names so the report's table
+resolves without renaming anything afterwards.
+
 **Cloud integration (10 pts)**
-- [ ] RDS console: instance `curbline-db`, status Available, engine PostgreSQL
-- [ ] ElastiCache console: cluster `curbline-cache`, status Available
-- [ ] SQS console: all four queues, showing messages available
-- [ ] SNS console: topic with a confirmed subscription
-- [ ] S3 console: audit bucket with objects under `advisories/`
-- [ ] EC2 console: the instance, with its IAM role attached
+- [ ] `cloud-rds.png` RDS console: instance `curbline-db`, status Available, engine PostgreSQL
+- [ ] `cloud-elasticache.png` ElastiCache console: cluster `curbline-cache`, status Available
+- [ ] `cloud-sqs.png` SQS console: all four queues, showing messages available
+- [ ] `cloud-sns.png` SNS console: topic with a confirmed subscription
+- [ ] `cloud-s3.png` S3 console: audit bucket with objects under `advisories/`
+- [ ] `cloud-ec2.png` EC2 console: the instance, with its IAM role attached
 
 **Distributed application (10 pts)**
-- [ ] `systemctl status 'curbline-*'` with all four units active
-- [ ] `journalctl -u curbline-collector` showing readings published
-- [ ] `journalctl -u curbline-correlator` showing clusters published
-- [ ] `journalctl -u curbline-dispatcher` showing an advisory with its audit key
-- [ ] SQS queue depth non-zero, which is the visible proof the stages are decoupled
+- [ ] `dist-systemctl.png` `systemctl status 'curbline-*'` with all four units active
+- [ ] `dist-collector-journal.png` `journalctl -u curbline-collector` showing readings published
+- [ ] `dist-correlator-journal.png` `journalctl -u curbline-correlator` showing clusters published
+- [ ] `dist-dispatcher-journal.png` `journalctl -u curbline-dispatcher` showing an advisory with its audit key
+- [ ] `dist-queue-depth.png` SQS queue depth non-zero, the visible proof the stages are decoupled
 
 **Technology components (15 pts)**
-- [ ] `SELECT PostGIS_Full_Version();` output
-- [ ] `SELECT * FROM current_clusters();` returning real zones
-- [ ] `redis-cli ... INFO keyspace` showing cached sensor keys
-- [ ] The received SNS email
-- [ ] One S3 audit object opened, showing the thresholds recorded alongside the decision
+- [ ] `tech-postgis-version.png` `SELECT PostGIS_Full_Version();` output
+- [ ] `tech-current-clusters.png` `SELECT * FROM current_clusters();` returning real zones
+- [ ] `tech-redis-keyspace.png` `redis-cli INFO keyspace` showing cached sensor keys
+- [ ] `tech-sns-email.png` The received SNS email
+- [ ] `tech-s3-audit-object.png` One S3 audit object opened, showing the thresholds recorded alongside the decision
 
 **End-to-end (30 pts)**
-- [ ] Console with zero zones (baseline)
-- [ ] Console with an active zone drawn, rail filled, advisory queued
-- [ ] Same zone before and after, showing depth change on the rail
-- [ ] A zone with `NWS confirmed` on the card, next to one without
-- [ ] Status bar showing queue depth, cache hit rate, PostGIS up
-- [ ] `curl /api/health` output
+- [ ] `e2e-console-baseline.png` Console with zero zones (baseline)
+- [ ] `e2e-console-active-zone.png` Console with an active zone drawn, rail filled, advisory queued
+- [ ] `e2e-console-depth-change.png` Same zone before and after, showing depth change on the rail
+- [ ] `e2e-console-status-bar.png` Status bar showing queue depth and PostGIS up. The
+      hit rate reads null by construction (E-019); capture it as it is rather than
+      waiting for a number that cannot arrive.
+- [ ] `e2e-api-health.png` `curl /api/health` output
+- [ ] **Expected unmet:** a zone with `NWS confirmed` next to one without. This needs
+      an active NWS flood alert intersecting a zone footprint during the capture
+      window. There were zero in the last run. Capture it if one exists, record the
+      reason in the Appendix C row if not. Do not fabricate a polygon to force it.
 
 **Deliberate failure, which is worth more than it costs**
-- [ ] Cache unreachable: console still serving, pip amber, `/api/health`
-      degraded. Procedure is "Run this FIRST" above; do not leave it until last.
+- [ ] `e2e-cache-degraded.png` Cache unreachable: console still serving, pip amber,
+      `/api/health` degraded. Procedure is "Run this FIRST" above; do not leave it
+      until last.
 
 ### Report
 
@@ -201,7 +213,7 @@ taken them.
 - [ ] `advisories` rows showing `sns_message_id` and `audit_key`
 - [ ] Duplicate-delivery replay: same `ingest_id`, one row before and after
 - [ ] Console: zero zones, active zone, before and after depth change
-- [ ] Console: status bar showing cache hit rate
+- [ ] Console: status bar, hit rate null per E-019 and captured as such
 - [ ] SNS email, or the written reason it could not be captured
 
 **Anything unobtainable is recorded, not silently dropped.** Put the reason in

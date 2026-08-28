@@ -138,12 +138,22 @@ The clustering function was validated against a fixture of real NYC coordinates
 Every one of these is a decision, not a constant. All live in `curbline/config.py`
 and are recorded in each S3 audit object alongside the decision they produced.
 
-| Parameter | Default | Rationale |
-|---|---|---|
-| `DEPTH_THRESHOLD_CM` | 5.0 | Above sensor noise, below curb height |
-| `CLUSTER_EPS_FT` | 1640 (~500 m) | Roughly a long NYC block |
-| `CLUSTER_MIN_SENSORS` | 2 | One wet sensor is a reading; two adjacent is a street |
-| `READING_WINDOW_MINS` | 15 | A reading older than this is not "current" |
+**The depth thresholds are source-specific and derived from `CURBLINE_SOURCE`,
+not fixed** (D-005). FloodNet reports standing water on a road surface; USGS
+reports gage height, a stage rise above an arbitrary local datum, which is a
+different physical quantity on a different scale. Applying one source's numbers
+to the other is wrong by roughly an order of magnitude, and it shipped that way
+until 2026-08-28 (E-014). `SOURCE` defaults to `usgs`, so the right-hand column
+is what an unconfigured run actually uses.
+
+| Parameter | FloodNet | USGS (default) | Rationale |
+|---|---|---|---|
+| `DEPTH_THRESHOLD_CM` | 5.0 | 60 | Detection floor: above sensor noise, below the point a car is affected |
+| `ADVISORY_THRESHOLD_CM` | 10 | 90 | Roughly half a curb. A driver notices, a pedestrian avoids it |
+| `WARNING_THRESHOLD_CM` | 20 | 120 | Most of a curb. A passenger vehicle is genuinely at risk |
+| `CLUSTER_EPS_FT` | 1640 (~500 m) | same | Roughly a long NYC block, measured in EPSG:2263 so it is constant across the city |
+| `CLUSTER_MIN_SENSORS` | 2 | same | One wet sensor is a reading; two adjacent is a street |
+| `READING_WINDOW_MINS` | 15 | same | A reading older than this is not "current" |
 
 A newly detected zone enters state `forming` and does **not** notify. It must
 survive a second cycle to reach `active`. This suppresses single-cycle sensor
@@ -213,6 +223,13 @@ The status bar carries queue depth, cache hit rate and database reachability,
 because the distributed system is the point and queue depth is the clearest
 visible proof the stages are decoupled.
 
+**The cache hit rate reads null, and that is a known defect, not a cold cache**
+(E-019). `cache.STATS` is a module-level counter, so it only counts what the
+process holding it did. `cache.sensor()` is called by the correlator; the API
+serves its own always-empty copy. The correlator has the real numbers and no
+transport to publish them. Fixing it needs the counters in Redis under a shared
+key or in a stats table, which is v1.x work.
+
 ### Building the console without AWS
 
 ```bash
@@ -254,8 +271,8 @@ ElastiCache bill by the hour whether or not anything is using them.
 ```
 CLAUDE.md               Project instructions for Claude Code (read first)
 VERSION_ROADMAP.md      Gated roadmap, v0.5.0 through v2.0.0
-DECISIONS.md            12 decisions, each with a flip condition
-ERRORS.md               Problems already found and fixed. Do not rediscover.
+DECISIONS.md            13 decisions, each with a flip condition
+ERRORS.md               19 logged defects, mostly fixed. Do not rediscover.
 TESTS.md                Test registry and stated coverage gaps
 RETENTION.md            Cold-defense drill log and flip watch
 CHANGELOG.md            Version history
@@ -279,7 +296,8 @@ api/mock_server.py      Runs the console with no AWS, for frontend work
 web/                    Console: index.html, style.css, app.js
 data/capture_replay.py  Records a live storm for demo replay
 systemd/                Service units
-tests/                  Clustering fixture and 26 unit tests
-docs/REPORT.md          Report skeleton, mapped to the rubric
+tests/                  Clustering fixture and 31 unit tests
+docs/REPORT.md          The report, mapped to the rubric
+docs/evidence/          CLI captures and S3 audit records from the live run
 DEMO.md                 Run book and evidence checklist
 ```
