@@ -181,3 +181,54 @@ decision gets either defended reflexively or relitigated from scratch. Both are
 worse than checking a stated trigger.
 
 Asked: never | Result: —
+
+---
+
+## v0.7.0 — the unreachable-input test
+
+**Q (technical interview).** Your test suite asserted
+`next_state("active", 1) == "receding"` and it passed for the life of the
+project. The behaviour it described never once occurred in production. Explain
+how both of those are true at the same time, and what it means for how you read
+a green suite.
+
+*Answer:* The assertion was correct about the function and irrelevant to the
+system. `next_state` really did return `receding` for a sensor count of 1. The
+pipeline could never hand it a 1: `current_clusters()` is called with
+`p_minpoints := CLUSTER_MIN_SENSORS` and filters `WHERE cid IS NOT NULL`, so
+every row it emits is a DBSCAN cluster with at least that many members. The test
+supplied an argument the producer makes impossible, so it proved a branch was
+correct without proving the branch was reachable. The consequence was that no
+zone ever receded or closed and `open_zones()` grew without bound.
+
+This is E-017 seen from the other side. There, a correct pure function was fed a
+wrongly obtained argument in production. Here, a correct pure function was fed
+an argument production cannot produce. Both pass every test. The general rule:
+a unit test fixes the relationship between an input and an output, and says
+nothing about whether that input occurs. When the producer of an argument
+constrains its range, the test has to be written inside that range, or it is
+measuring a function nobody calls. **A passing test on an unreachable input is
+worse than no test, because it reads as coverage.**
+
+**Q (McCulloh / Liew).** You found six defects by auditing rather than by
+running the system. What made that possible, and why is it worth more than the
+six fixes?
+
+*Answer:* Three defects had already occurred and had been written up. Read as a
+list they were unrelated: a psycopg type mapping, a UUID compared to a string, a
+counter in the wrong process. Read as a shape they were one thing: code correct
+in isolation and wrong across a boundary the test suite cannot observe. Naming
+the boundary turns each entry into a search: every Python value entering
+PostgreSQL, every value crossing SQS and then compared to one that did not,
+every piece of module-level state read by a process that did not write it. Those
+searches found E-020 through E-025, including one that meant every zone issued
+at most one advisory ever.
+
+Worth more than the fixes because it changes when a defect entry is closed. An
+entry is closed when the instance is fixed; it should be closed when the
+codebase has been searched for the class. Applying that at E-013 rather than at
+E-019 would have caught the threshold literals in the frontend and in the SQL
+defaults immediately, instead of after they had been "fixed" twice in other
+layers.
+
+Asked: never | Result: —

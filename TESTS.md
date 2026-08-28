@@ -4,7 +4,7 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 36 passing, 0 failing.**
+**Current: 58 passing, 0 failing.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q

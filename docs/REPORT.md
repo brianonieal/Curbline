@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-36 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+58 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -455,11 +455,16 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone id still matches the string in the queue body |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries once |
 | `TestCacheStatsTransport` | 5 | E-019: counters publish and clear, a failed flush retains them, and an unknown hit rate reads null rather than zero |
+| `TestWorkerHeartbeat` | 4 | E-023: a silent worker reads as not live, and an unreachable cache reads as unknown rather than dead |
+| `TestHealthVerdict` | 5 | E-023: a stopped component degrades the system verdict; unknown liveness does not |
+| `TestRecessionIsDrivenByAbsence` | 4 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
+| `TestAdvisorySuppression` | 6 | E-021: escalation notifies even when state is unchanged; a NULL last level does not silence the first advisory |
 
 **What this suite could not catch, stated rather than hidden.** The suite is
 moto throughout and never executed SQL against a real PostGIS instance or
 exercised psycopg's type mapping. Two defects lived in exactly that blind spot
-until the system first ran against real managed services:
+until the system first ran against real managed services, and six more were
+found afterwards by auditing for their shape rather than waiting for them:
 
 - **E-013.** `current_clusters(NUMERIC, INT, NUMERIC, INT)` was called with
   Python floats, which psycopg sends as `double precision`. PostgreSQL casts
@@ -474,15 +479,66 @@ until the system first ran against real managed services:
   `next_state` was unit tested and correct; the defect was one line above the
   call, in how its argument was obtained.
 
-The last two rows of the table above are regression tests added for those two.
 The general lesson is worth more than either fix: a pure function tested in
 isolation says nothing about whether its inputs are ever computed correctly.
 
+**What that lesson then found.** Rather than treat E-013, E-017 and E-019 as
+three unrelated bugs, they were read as three instances of one shape: code that
+is correct in isolation and wrong across a boundary the test suite cannot see.
+E-013 crossed Python into PostgreSQL's type resolver, E-017 crossed a value
+through JSON and compared it to one that had not, E-019 crossed process memory.
+The codebase was then audited for each boundary specifically. That found six
+more defects, none of which any test was going to catch:
+
+- **E-020.** `next_state` receded a zone on `sensor_count < CLUSTER_MIN_SENSORS`.
+  That can never be true: `current_clusters()` is called with
+  `p_minpoints := CLUSTER_MIN_SENSORS` and discards noise, so every row it
+  returns already has at least that many members. The branch was unreachable, no
+  zone ever receded or closed, and `open_zones()` grew without bound. Underneath
+  it was a design gap rather than a typo: a zone stops flooding by *disappearing*
+  from the cluster set, and disappearance is not an event a queue message can
+  carry. It is now swept for on a timer.
+- **E-021.** The duplicate-advisory guard compared state and corroboration but
+  not level, under a comment claiming it compared level. A zone rising from
+  10 cm to 25 cm held `state = active` with unchanged corroboration, so it
+  compared equal to its own previous cycle and was suppressed. **Combined with
+  E-020, every zone issued at most one advisory ever**, at whatever level it
+  carried when it first activated.
+- **E-022, E-025.** The source-specific thresholds of D-005 were still literals
+  in the frontend map expressions and in the SQL function's default arguments,
+  after having been fixed in the dispatcher (E-014) and in the API payload. Each
+  fix was real and each stopped one layer short.
+- **E-023.** `/api/health` returned `ok` with all three graded components
+  stopped, because it checked the database and cache, which a dead worker does
+  not affect, and an empty queue is indistinguishable from a healthy one.
+- **E-024.** Dead-letter queue depth was computed and discarded, under a
+  docstring saying it was reported.
+
+E-020 and E-021 are the ones worth dwelling on, because the suite did not merely
+miss E-020: it *asserted* it. `next_state("active", 1) == "receding"` passed for
+the life of the project, on an argument the pipeline cannot produce. E-017 was a
+correct pure function fed a wrongly obtained input. E-020 is a pure function
+tested against an input that does not occur. **A passing test on an unreachable
+input is not coverage, and it is more dangerous than no test, because it reads
+as coverage.** The regression tests added here assert against reachable inputs
+only, and `should_notify`, `sweep_state` and `health_status` were extracted as
+pure functions specifically so the decisions they encode could be tested with
+real arguments rather than inferred from the code around them.
+
+Honesty about what this does not establish: these fixes are verified by unit
+tests and by reading, not by a run against live infrastructure. E-020 and E-021
+were found after the 2026-08-28 capture and the three advisories in that
+evidence set were produced by the pre-fix code, which is consistent with "one
+advisory per zone, then silence." The corrected escalation and closure paths
+have not yet been observed end to end on real managed services.
+
 ### 6.3 Evidence
 
-Full screenshot set in Appendix C. Nine defects were found and fixed during the
-first end-to-end run against real infrastructure, logged as E-009 through E-017
-in `ERRORS.md`. Two more were identified in the evidence capture session: E-018,
+Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
+nine found during the first end-to-end run against real infrastructure
+(E-009 through E-017), and six found afterwards by the boundary audit described
+in section 6.2 (E-020 through E-025). Two came from the evidence capture
+session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
 on a working cache because the counter was a module-level dictionary in the
@@ -497,7 +553,7 @@ as an existence oracle, are the substance of what building this taught.
 
 ## 7. Limitations
 
-Nine, stated plainly.
+Twelve, stated plainly.
 
 1. **The hull overstates the flooded area.** Cluster footprints are convex hulls
    buffered by 492 ft to guarantee a valid polygon. A zone marker, not a flood
@@ -551,6 +607,39 @@ Nine, stated plainly.
    advisories, which is the honest result for a dry day and demonstrates nothing
    whatsoever about the notification path.
 
+10. **The USGS baseline is held in the collector's memory and is lost on
+    restart.** `USGSSource` reports rise above a per-site p10 baseline resolved
+    once per process. If the history fetch fails, the baseline falls back to the
+    current reading, which yields a rise of zero. On a dry first start that is
+    the safe direction and is why it was written that way. During a storm it
+    inverts: systemd restarts the collector, the fetch blips, the baseline pins
+    to an already elevated reading, and that site reports zero rise for as long
+    as the process lives. The failure suppresses the event the system exists to
+    detect, and nothing reports it as degraded. The `readings` table has no
+    column for the datum, so rows written either side of a restart are measured
+    against different baselines and are compared to each other by the window
+    query. Fixing this means persisting the baseline per site and emitting a
+    null depth rather than a zero when it is provisional.
+
+11. **Reading timestamps are passed to PostgreSQL as strings and trusted.**
+    `observed_at` is whatever the upstream API returned, inserted into a
+    `TIMESTAMPTZ` column. If a source ever emits a timestamp without an offset,
+    PostgreSQL interprets it in the server's timezone. A shift larger than the
+    15-minute reading window would silently empty every cluster query with no
+    error and no exception, which is the same signature as E-013 and E-017.
+    Both current sources emit offset-aware ISO-8601, so this is latent rather
+    than active, and it is latent by luck rather than by validation.
+
+12. **The audit record attests the dispatcher's thresholds, not the
+    correlator's.** The immutable S3 record names the four detection parameters
+    by reading them from the dispatcher's own configuration, while the
+    clustering that produced the zone ran in the correlator with its copy. All
+    four processes read the same `.env`, so they agree in steady state. Restart
+    one and not the others and the record attests to parameters that were not
+    applied. For the artifact whose entire purpose is to say why a decision was
+    made, plausible and wrong is worse than absent. The fix is to carry the
+    parameters in the zones message rather than re-read them.
+
 ---
 
 ## 8. What I would do differently
@@ -575,6 +664,22 @@ a moto-only suite and both were found by a human running the system. A
 containerised Postgres is not available under this assignment's constraints, but
 a hosted instance in a test account would have caught both in minutes.
 
+**Persist the USGS baseline.** Limitation 10 is the most severe unfixed defect
+in the system, because its failure mode is silent suppression of detection
+rather than a visible error. The baseline belongs in the `sensors` table or in
+Redis with a long TTL, and a provisional baseline should produce a null depth
+rather than a confident zero.
+
+**Audit for defect shape rather than waiting for instances.** The six defects in
+E-020 through E-025 were found by taking three that had already occurred,
+naming the boundary each one crossed, and searching the codebase for other
+crossings of the same boundary. That was a few hours and it found a bug that
+meant every zone issued at most one advisory ever. The general form is worth
+more than the specific fixes: **once a defect is understood, it is a query, and
+the codebase should be searched with it before the entry is closed.** Doing that
+at E-013 rather than at E-019 would have found E-025 and E-022 months earlier in
+a longer project.
+
 ---
 
 ## Appendix A: Repository layout
@@ -586,14 +691,14 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           36 unit tests plus fixture_clusters.sql
+tests/           58 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
-condition), `ERRORS.md` (19 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (25 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown

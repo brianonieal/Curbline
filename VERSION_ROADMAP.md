@@ -200,7 +200,8 @@ noise is fine for proving wiring and dishonest in a screenshot.
 - [ ] REPORT.md complete, every bracketed placeholder removed
 - [ ] Which data source produced each screenshot is stated
 - [ ] If any demo used replayed data, that is disclosed with its capture date
-- [ ] Limitations section names all five known limitations
+- [x] Limitations section names all known limitations (twelve, exceeding the
+      five this criterion was written against)
 
 **Estimate:** 3 to 4 hours. This is consistently underestimated.
 

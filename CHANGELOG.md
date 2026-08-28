@@ -33,7 +33,42 @@ session. No pipeline behaviour changed except the cache stats transport.
   from the report.
 - The report's course header no longer carries a bracketed placeholder.
 
+### Fixed by the boundary audit
+E-013, E-017 and E-019 were read as one shape rather than three bugs: code
+correct in isolation and wrong across a boundary the suite cannot see. Auditing
+each boundary specifically found six more.
+
+- **E-020.** No zone ever receded or closed. `next_state` receded on
+  `sensor_count < CLUSTER_MIN_SENSORS`, which cannot hold, because
+  `current_clusters()` is called with `p_minpoints := CLUSTER_MIN_SENSORS` and
+  discards noise. Recession is now swept for on a timer, because a zone stops
+  flooding by disappearing and no queue message can carry an absence.
+- **E-021.** Each zone issued at most one advisory ever. The duplicate guard
+  compared state and corroboration but not level, under a comment saying it
+  compared level. Rising water crossing a threshold never notified.
+- **E-022.** `web/app.js` hardcoded FloodNet's thresholds into the map
+  expressions, so on the `usgs` default the map and the depth rail disagreed.
+- **E-023.** `/api/health` returned `ok` with all three graded components dead.
+  Workers now heartbeat through Redis.
+- **E-024.** Dead-letter queue depth was computed and discarded, under a
+  docstring saying it was reported. `provision.py` never wrote the DLQ URLs.
+- **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
+  whatever the source. Documented loudly; the committed evidence query now
+  passes its parameters explicitly.
+
+E-014, E-022 and E-025 are the same defect in three layers. D-005 said
+thresholds move with the source; the dispatcher, the frontend and the SQL
+defaults each did not implement it, and each fix stopped one layer short.
+
 ### Added
+- 27 tests. 31 to 58. `should_notify`, `sweep_state` and `health_status`
+  extracted as pure functions so the decisions they encode are testable with
+  reachable inputs, which is the direct lesson of E-020: the suite asserted
+  `next_state("active", 1) == "receding"` and passed, on an argument the
+  pipeline cannot produce.
+- Limitations 10 through 12 in the report: the USGS baseline lost on restart,
+  unvalidated reading timestamps, and an audit record attesting the wrong
+  process's thresholds. All found by the audit, none fixed.
 - 5 tests in `TestCacheStatsTransport`. 31 to 36.
 - D-014, the cache counter transport decision, with its flip condition.
 - `docs/evidence/api-state.json` and `docs/evidence/cli/current-clusters-query.sql`
