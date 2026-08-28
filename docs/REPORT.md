@@ -582,5 +582,53 @@ teardown consumes a month's allowance.
 
 ## Appendix C: Full screenshot set
 
-[Screenshot index. One row per file with a one-line caption. Populate from the
-DEMO.md checklist once the capture sweep is complete.]
+Every screenshot states which data source produced it. Captures marked
+**replay** used `data/replay.example.json`, a four-frame recorded storm
+progression, and are disclosed as replays here and in `curbline/sources.py`.
+Captures marked **usgs** are live gage data.
+
+
+### Cloud integration (10 pts)
+
+| File | Source | Caption |
+|---|---|---|
+| | | RDS console: instance `curbline-db`, status Available, engine PostgreSQL |
+| | | ElastiCache console: cluster `curbline-cache`, status Available |
+| | | SQS console: all four queues, showing messages available |
+| | | SNS console: topic with a confirmed subscription |
+| | | S3 console: audit bucket with objects under `advisories/` |
+| | | EC2 console: the instance, with its IAM role attached |
+
+### Distributed application (10 pts)
+
+| File | Source | Caption |
+|---|---|---|
+| | | `systemctl status 'curbline-*'` with all four units active |
+| | | `journalctl -u curbline-collector` showing readings published |
+| | | `journalctl -u curbline-correlator` showing clusters published |
+| | | `journalctl -u curbline-dispatcher` showing an advisory with its audit key |
+| | | SQS queue depth non-zero, which is the visible proof the stages are decoupled |
+
+### Technology components (15 pts)
+
+| File | Source | Caption |
+|---|---|---|
+| | | `SELECT PostGIS_Full_Version();` output |
+| | | `SELECT * FROM current_clusters();` returning real zones |
+| | | `redis-cli ... INFO keyspace` showing cached sensor keys |
+| | | The received SNS email |
+| | | One S3 audit object opened, showing the thresholds recorded alongside the decision |
+
+### End-to-end (30 pts)
+
+| File | Source | Caption |
+|---|---|---|
+| | | Console with zero zones (baseline) |
+| | | Console with an active zone drawn, rail filled, advisory queued |
+| | | Same zone before and after, showing depth change on the rail |
+| | | A zone with `NWS confirmed` on the card, next to one without |
+| | | Status bar showing queue depth, cache hit rate, PostGIS up |
+| | | `curl /api/health` output |
+| | | Stop ElastiCache, reload the console, show it still working with the cache |
+
+*Unmet captures are listed with the reason rather than removed. See section 7.*
