@@ -7,7 +7,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow
 
 ## [Unreleased]
 
-Nothing yet. v0.6.0 opens on pipeline behaviour.
+Evidence and documentation work between the v0.5.0 run and the v0.7.0 capture
+session. No pipeline behaviour changed except the cache stats transport.
+
+### Fixed
+- **E-019, the dashboard cache hit rate.** Counters are published to Redis under
+  `stats:cache:*` and drained from the worker loop between batches, so the API
+  reports the pipeline's cache effectiveness rather than its own always-empty
+  copy. `hit_rate` is null for unknown, never 0.0. See D-014.
+- `scripts/gate-check.sh` looked only for `.venv/bin/python` and fell through to
+  a bare `python3` without the dependencies, reporting 24 test failures on a
+  clean tree. It now checks both venv layouts and hard blocks when the
+  interpreter cannot import pytest, because a gate must not close on an unrun
+  suite.
+
+### Changed
+- README's detection parameters table listed FloodNet's 5/10/20 as the default
+  while `CURBLINE_SOURCE` defaults to `usgs`. That is E-014 reproduced in the
+  documentation after being fixed in the code. Both columns are now shown with
+  the default named.
+- README corrected on the cache hit rate, test count, decision count, and the
+  description of `docs/REPORT.md`, which is written rather than a skeleton.
+- `DEMO.md` and Appendix C of the report now share 22 fixed screenshot
+  filenames, so captures drop in without renaming and the run book cannot drift
+  from the report.
+- The report's course header no longer carries a bracketed placeholder.
+
+### Added
+- 5 tests in `TestCacheStatsTransport`. 31 to 36.
+- D-014, the cache counter transport decision, with its flip condition.
+- `docs/evidence/api-state.json` and `docs/evidence/cli/current-clusters-query.sql`
+  from the 2026-08-28 capture session.
 
 ---
 
