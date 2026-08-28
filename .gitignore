@@ -12,3 +12,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 screenshots/raw/
+
+# EC2 login key. Publishing it hands anyone ubuntu on the instance, and deleting
+# the commit afterward is not a fix: the pair has to be rotated and the box
+# relaunched.
+*.pem
+
+# Consolidation archive from the v0.4.1 import. The tree supersedes it.
+files.zip
