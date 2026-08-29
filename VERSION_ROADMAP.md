@@ -24,7 +24,7 @@ of them can advance without it.
 | v0.6.0 | 7 of 8 | The SNS email, which needs the confirmed subscription |
 | v0.7.0 | 0 of 6 | Every criterion. All need the console served from live state |
 | v0.8.0 | Report done | The 22 screenshots; every other criterion is met |
-| v1.0.0 | Not started | Push, submit, teardown, verify nothing billable |
+| v1.0.0 | Push done | Deliver, teardown, verify nothing billable, records |
 
 Do not open these as four separate sessions. The stack bills hourly and the
 per-provision cost is roughly twenty minutes plus RDS creation, so the
@@ -324,15 +324,23 @@ noise is fine for proving wiring and dishonest in a screenshot.
 
 **Exit criteria**
 - [ ] `git status` confirms `.env` and `infra/stack.json` are not staged
-- [ ] Pushed to GitHub, repo accessible to instructors
-- [ ] Link submitted in the Canvas text entry box
-- [ ] Instructors emailed
+- [x] Pushed to GitHub, repo public and reachable without authentication
+      (verified 2026-08-28: `private: false`, unauthenticated API returns 200)
+- [ ] Delivered through whatever channel the course requires
+
+      The Canvas text-entry and instructor-email items were removed on
+      2026-08-28 because they no longer describe how this is submitted. They are
+      replaced by one criterion rather than none: a gate called "Submitted" that
+      asserts nothing about submission would close on a repository that was
+      never handed to anyone. The channel is deliberately unnamed here because
+      it is not yet decided; name it when it is.
 - [ ] `python3 infra/teardown.py --confirm` run
 - [ ] AWS console confirms nothing billable remains
 - [ ] `CHANGELOG.md` and `TIMELOG.md` current
 - [ ] REFLEXION written for Phase A into `MEMORY_CORRECTIONS.md`
 
-**Estimate:** 1 hour.
+**Estimate:** 30 minutes. The push is done and the Canvas and email steps
+were removed, so what remains is teardown verification and records.
 
 **Phase A total: 11 to 17 hours.** At a two-day budget that fits with room for
 one bad surprise, not two.
