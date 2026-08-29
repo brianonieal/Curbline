@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -21,6 +22,7 @@ from . import config, db
 log = logging.getLogger(__name__)
 
 _client: redis.Redis | None = None
+_client_lock = threading.Lock()
 
 # Unflushed deltas for THIS process, not a total. Incremented on the hot path,
 # drained by flush_stats(). Reading this dict to answer "what is the hit rate"
@@ -41,14 +43,20 @@ _STATS_KEYS = {
 
 def client() -> redis.Redis:
     global _client
+    # Same reason as db.pool(): the API builds state from several threads and
+    # both could construct a client at startup. Cheaper to lose here than a
+    # database connection, but a discarded client is still a socket nobody
+    # closes. Double-checked so the lock is paid once.
     if _client is None:
-        _client = redis.Redis(
-            host=config.CACHE_HOST,
-            port=config.CACHE_PORT,
-            socket_timeout=2,
-            socket_connect_timeout=2,
-            decode_responses=True,
-        )
+        with _client_lock:
+            if _client is None:
+                _client = redis.Redis(
+                    host=config.CACHE_HOST,
+                    port=config.CACHE_PORT,
+                    socket_timeout=2,
+                    socket_connect_timeout=2,
+                    decode_responses=True,
+                )
     return _client
 
 

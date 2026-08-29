@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import threading
 import uuid
 from typing import Any, Iterator
 
@@ -14,21 +15,31 @@ from psycopg_pool import ConnectionPool
 from . import config
 
 _pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
 def pool() -> ConnectionPool:
     global _pool
+    # Locked because the API reaches this from several threads at once.
+    # build_state() is dispatched through asyncio.to_thread by the broadcaster,
+    # by every /api/state, and by every websocket connect, so at startup two
+    # threads can both see None and each build a pool. The loser is never
+    # returned but still holds min_size connections against a max_size of 4,
+    # which shows up later as the database refusing connections for no visible
+    # reason. Double-checked so the lock is paid once, not per query.
     if _pool is None:
-        _pool = ConnectionPool(
-            conninfo=(
-                f"host={config.DB_HOST} port={config.DB_PORT} "
-                f"dbname={config.DB_NAME} user={config.DB_USER} "
-                f"password={config.DB_PASSWORD} connect_timeout=10"
-            ),
-            min_size=1,
-            max_size=4,
-            kwargs={"row_factory": dict_row},
-        )
+        with _pool_lock:
+            if _pool is None:
+                _pool = ConnectionPool(
+                    conninfo=(
+                        f"host={config.DB_HOST} port={config.DB_PORT} "
+                        f"dbname={config.DB_NAME} user={config.DB_USER} "
+                        f"password={config.DB_PASSWORD} connect_timeout=10"
+                    ),
+                    min_size=1,
+                    max_size=4,
+                    kwargs={"row_factory": dict_row},
+                )
     return _pool
 
 
