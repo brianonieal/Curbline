@@ -68,8 +68,17 @@ fi
 
 if command -v node >/dev/null 2>&1; then
   node --check web/app.js 2>/dev/null && ok "app.js parses" || fail "app.js syntax error"
+  # Parsing only proves it is JavaScript. Seven of the evidence screenshots are
+  # the console, and an exception during a capture session costs the session,
+  # so the smoke test drives apply() through the real payload shapes including
+  # the degraded ones.
+  if node tests/console_smoke.js >/tmp/gate-console.txt 2>&1; then
+    ok "console smoke: $(grep -c '^  ok' /tmp/gate-console.txt) checks"
+  else
+    fail "console smoke failed. HARD BLOCK. See /tmp/gate-console.txt"
+  fi
 else
-  warn "node not installed, skipped app.js check"
+  warn "node not installed, skipped app.js checks"
 fi
 
 bash -n infra/bootstrap.sh 2>/dev/null && ok "bootstrap.sh syntax valid" \

@@ -4,7 +4,19 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 81 passing, 0 failing.**
+**Current: 81 Python passing, 0 failing. Plus 18 console checks in
+`tests/console_smoke.js`, run by `gate-check.sh`.**
+
+The console had no automated coverage at all until 2026-08-28, and seven of the
+twenty-two evidence screenshots are the console. `console_smoke.js` loads
+`web/app.js` into a stubbed DOM and MapLibre and drives `apply()` through the
+payload shapes the API actually produces, including the degraded ones: an
+unreachable cache, a database down, a queue probe returning -1, a null sensor
+depth, a forming zone. A thrown exception fails the gate.
+
+It was verified to fail: no-opping `applyThresholds()` breaks four of its
+checks. A harness that cannot catch the regression it was written for is the
+E-020 mistake in a different language.
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
