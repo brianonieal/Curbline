@@ -19,6 +19,21 @@ if ! command -v aws >/dev/null 2>&1; then
 fi
 
 cd /home/ubuntu/curbline
+
+# The instance survives teardown, so this box is usually a returning one with a
+# clone from the last session. Provisioning a stale checkout is how you end up
+# debugging a defect that was fixed hours ago, or hitting a missing fixture that
+# only reached the repo after the last pull. See E-031.
+if [ -d .git ]; then
+  echo "[bootstrap] repo at $(git rev-parse --short HEAD), fetching"
+  git pull --ff-only || {
+    echo "[bootstrap] git pull failed. Resolve it before provisioning:" >&2
+    echo "[bootstrap]   the code about to create billable resources is stale." >&2
+    exit 1
+  }
+  echo "[bootstrap] now at $(git rev-parse --short HEAD)"
+fi
+
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
@@ -30,7 +45,9 @@ python3 -m venv .venv
 # host that resolves to the instance's own public IP, which opens tcp/8000 to
 # nobody. See E-008.
 : "${CURBLINE_ADMIN_CIDR:?set to your own public IP as a /32, e.g. 203.0.113.7/32. See E-008}"
-.venv/bin/python infra/provision.py --region "${AWS_REGION:-us-east-1}"                                     --admin-cidr "$CURBLINE_ADMIN_CIDR"
+.venv/bin/python infra/provision.py \
+  --region "${AWS_REGION:-us-east-1}" \
+  --admin-cidr "$CURBLINE_ADMIN_CIDR"
 
 # Load the schema. Screenshot the PostGIS version line that this prints.
 set -a; source .env; set +a

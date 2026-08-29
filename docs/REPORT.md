@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-92 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+95 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -708,7 +708,7 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           92 unit tests plus fixture_clusters.sql
+tests/           95 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report

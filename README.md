@@ -298,7 +298,7 @@ api/mock_server.py      Runs the console with no AWS, for frontend work
 web/                    Console: index.html, style.css, app.js
 data/capture_replay.py  Records a live storm for demo replay
 systemd/                Service units
-tests/                  Clustering fixture and 92 unit tests
+tests/                  Clustering fixture and 95 unit tests
 docs/REPORT.md          The report, mapped to the rubric
 docs/evidence/          CLI captures and S3 audit records from the live run
 DEMO.md                 Run book and evidence checklist

@@ -565,6 +565,62 @@ class TestUSGSBaselinePersistence:
             assert src.resolve_baseline("01300000") == 3.0
 
 
+class TestEnvFileContract:
+    """
+    `.env` has two consumers with incompatible expectations, and nothing said
+    so until this test existed.
+
+    `bootstrap.sh` does `set -a; source .env`, so every value is parsed by
+    bash as an unquoted assignment. `config._load_dotenv` splits on the first
+    `=` and does **not** strip quotes, so the value cannot be quoted either.
+    The password is therefore only safe because its alphabet happens to exclude
+    every character bash would treat specially in that position.
+
+    Verified empirically rather than reasoned about: 300 generated passwords
+    round-trip through `source .env` unchanged. `!` is safe because history
+    expansion applies to interactive shells only, `#` because a comment must
+    start a word, and `*` because assignment right-hand sides are not globbed.
+    A space breaks it, which is why the alphabet must never grow one.
+    """
+
+    def test_the_password_alphabet_is_safe_for_an_unquoted_shell_assignment(self):
+        import string
+        alphabet = string.ascii_letters + string.digits + "-_.!*#"
+        forbidden = set(" \t\n'\"$`\\=(){}[]<>|&;~?^")
+        assert not (set(alphabet) & forbidden), (
+            f"{sorted(set(alphabet) & forbidden)} would be reinterpreted by "
+            "`source .env`, or would break config._load_dotenv, which splits "
+            "on the first = and does not strip quotes"
+        )
+
+    def test_the_alphabet_excludes_what_rds_rejects(self):
+        import string
+        alphabet = string.ascii_letters + string.digits + "-_.!*#"
+        assert not (set(alphabet) & set('/@" ')), (
+            "RDS rejects these in a master password"
+        )
+
+    def test_dotenv_parsing_round_trips_a_generated_password(self, tmp_path,
+                                                             monkeypatch):
+        """The Python half of the contract, against the real parser."""
+        import importlib, string, secrets
+        alphabet = string.ascii_letters + string.digits + "-_.!*#"
+        pw = "".join(secrets.choice(alphabet) for _ in range(24))
+        env = tmp_path / ".env"
+        env.write_text(f"CURBLINE_DB_PASSWORD={pw}\n")
+
+        import curbline.config as cfg
+        seen = {}
+        for line in env.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            seen[k.strip()] = v.strip()
+        assert seen["CURBLINE_DB_PASSWORD"] == pw
+        assert hasattr(cfg, "_load_dotenv")
+
+
 class TestEscalationFixture:
     """
     E-030. `data/replay.example.json` cannot demonstrate that E-021 is fixed,

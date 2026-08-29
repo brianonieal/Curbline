@@ -4,7 +4,7 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 92 Python passing, 0 failing. Plus 18 console checks in
+**Current: 95 Python passing, 0 failing. Plus 18 console checks in
 `tests/console_smoke.js`, run by `gate-check.sh`.**
 
 The console had no automated coverage at all until 2026-08-28, and seven of the
