@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-81 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+87 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -459,6 +459,7 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestHealthVerdict` | 5 | E-023: a stopped component degrades the system verdict; unknown liveness does not |
 | `TestRecessionIsDrivenByAbsence` | 7 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
 | `TestAdvisorySuppression` | 6 | E-021: escalation notifies even when state is unchanged; a NULL last level does not silence the first advisory |
+| `TestAlertIngestGuards` | 6 | E-029: an alert with no id fails at the producer, and a NULL expiry is published rather than invented |
 | `TestReadingTimestamps` | 8 | E-028: an offset is required and normalised to UTC on the type itself, and one bad gauge skips its reading rather than the poll |
 | `TestAuditProvenance` | 3 | E-027: the record names the parameters that produced the cluster, and a substituted value says it was substituted |
 | `TestUSGSBaselinePersistence` | 9 | E-026: the datum survives a restart, and a site with no datum is withheld rather than reported as zero rise |
@@ -540,7 +541,7 @@ have not yet been observed end to end on real managed services.
 Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
 nine found during the first end-to-end run against real infrastructure
 (E-009 through E-017), and six found afterwards by the boundary audit described
-in section 6.2 (E-020 through E-028). Two came from the evidence capture
+in section 6.2 (E-020 through E-029). Two came from the evidence capture
 session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
@@ -697,14 +698,14 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           81 unit tests plus fixture_clusters.sql
+tests/           87 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
-condition), `ERRORS.md` (28 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (29 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown

@@ -130,6 +130,38 @@ def main() -> int:
                 raise RuntimeError("last_level column absent; E-021 fix inert")
             return f"{len(rows)} open zones"
 
+        # E-029. The predicate changed in three places and none of it is
+        # reachable by a unit test. Asserting the semantics rather than that
+        # the query parses: a NULL expiry must count as active, because the
+        # endpoint only returns active alerts.
+        @check("NULL-expiry alerts count as active, not expired")
+        def _():
+            with conn.transaction() as tx:
+                with conn.cursor() as cur:
+                    aid = f"preflight:{uuid.uuid4()}"
+                    cur.execute(
+                        "INSERT INTO alerts (alert_id, event, expires, geom) "
+                        "VALUES (%s,%s,NULL,"
+                        "ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s),4326)))",
+                        (aid, "Flash Flood Warning",
+                         '{"type":"Polygon","coordinates":'
+                         '[[[-73.9,40.7],[-73.8,40.7],[-73.8,40.8],'
+                         '[-73.9,40.7]]]}'))
+                    cur.execute(
+                        "SELECT alert_for_hull(ST_SetSRID(ST_GeomFromGeoJSON("
+                        "%s),4326)::geometry(Polygon,4326)) AS a",
+                        ('{"type":"Polygon","coordinates":'
+                         '[[[-73.89,40.71],[-73.81,40.71],[-73.81,40.79],'
+                         '[-73.89,40.71]]]}',))
+                    got = cur.fetchone()["a"]
+                    if got != aid:
+                        raise RuntimeError(
+                            "a NULL-expiry alert did not correlate. The E-029 "
+                            "predicate is missing from alert_for_hull, so "
+                            "zone-based products are invisible again.")
+                raise psycopg.Rollback(tx)
+            return "correlates"
+
         @check("stale_open_zones() runs")
         def _():
             from curbline import db

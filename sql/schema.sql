@@ -195,7 +195,15 @@ LANGUAGE sql STABLE AS $$
     SELECT a.alert_id
     FROM alerts a
     WHERE a.geom IS NOT NULL
-      AND a.expires > now()
+      -- The endpoint is /alerts/active, so anything stored here was active
+      -- when it was fetched. `expires > now()` is false for NULL, which meant
+      -- an alert with no expiry field was silently never correlated, never
+      -- drawn and never counted. NULL is not fabricated into a timestamp:
+      -- instead it means "active while the feed still lists it", bounded by
+      -- updated_at, which the upsert refreshes on every poll. See E-029.
+      AND (a.expires > now()
+           OR (a.expires IS NULL
+               AND a.updated_at > now() - interval '30 minutes'))
       AND ST_Intersects(p_hull, a.geom)
     ORDER BY
         CASE a.severity

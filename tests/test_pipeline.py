@@ -565,6 +565,84 @@ class TestUSGSBaselinePersistence:
             assert src.resolve_baseline("01300000") == 3.0
 
 
+class TestAlertIngestGuards:
+    """
+    E-029. Two ways an NWS alert became useless without saying so.
+
+    `alert_id` is the primary key. When neither `properties.id` nor the feature
+    id was present it published None, the insert violated NOT NULL, and because
+    SQS redelivers, the same message failed five times before dead-lettering.
+
+    `expires` is worse because it is silent. The endpoint is
+    `/alerts/active`, so everything it returns is active by definition, and yet
+    three queries filtered on `expires > now()`, which is false for NULL. An
+    alert with no expiry field was stored and then never correlated with a zone,
+    never drawn, and never counted.
+    """
+
+    def _feature(self, **props):
+        base = {"id": "urn:oid:1", "event": "Flash Flood Warning",
+                "severity": "Severe", "headline": "h",
+                "effective": "2026-08-28T12:00:00+00:00",
+                "expires": "2026-08-28T18:00:00+00:00"}
+        base.update(props)
+        return {"id": "feat-1", "geometry": None, "properties": base}
+
+    def _run(self, features):
+        from workers import collector
+        sent = []
+        resp = mock.MagicMock()
+        resp.json.return_value = {"features": features}
+        with mock.patch.object(collector.requests, "get", return_value=resp), \
+             mock.patch.object(collector.aws, "send",
+                               side_effect=lambda q, b: sent.append(b)):
+            collector.poll_alerts()
+        return sent
+
+    def test_a_valid_alert_is_published(self):
+        sent = self._run([self._feature()])
+        assert len(sent) == 1
+        assert sent[0]["alert_id"] == "urn:oid:1"
+
+    def test_an_alert_with_no_id_is_skipped_at_the_collector(self):
+        """
+        Publishing it costs five SQS receives and a dead-letter for a message
+        that could never have been stored. Fail at the producer, where the
+        cause is visible.
+        """
+        f = self._feature(id=None)
+        f["id"] = None
+        assert self._run([f]) == []
+
+    def test_the_feature_id_is_used_when_properties_lacks_one(self):
+        f = self._feature(id=None)
+        sent = self._run([f])
+        assert len(sent) == 1
+        assert sent[0]["alert_id"] == "feat-1"
+
+    def test_a_missing_expiry_is_published_as_null_not_invented(self):
+        """
+        NULL is honest: we do not know when it stops being valid. The queries
+        are what changed, so NULL now means "active while the feed still lists
+        it" rather than "expired". Fabricating an expiry here would put a made
+        up timestamp in the database.
+        """
+        f = self._feature(expires=None)
+        f["properties"].pop("ends", None)
+        sent = self._run([f])
+        assert len(sent) == 1
+        assert sent[0]["expires"] is None
+
+    def test_the_ends_field_is_used_when_expires_is_absent(self):
+        f = self._feature(expires=None)
+        f["properties"]["ends"] = "2026-08-28T20:00:00+00:00"
+        sent = self._run([f])
+        assert sent[0]["expires"] == "2026-08-28T20:00:00+00:00"
+
+    def test_non_flood_events_are_still_dropped(self):
+        assert self._run([self._feature(event="Winter Storm Warning")]) == []
+
+
 class TestReadingTimestamps:
     """
     Limitation 11, now E-028. `observed_at` was whatever the upstream API

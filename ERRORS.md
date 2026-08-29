@@ -847,6 +847,60 @@ the dataclass.
 
 ---
 
+## E-029 - An NWS alert with no expiry is stored and then ignored by everything
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit; would have silently weakened a graded feature
+
+**Symptom:** two, and the second is the dangerous one.
+
+A flood alert whose feature carried no id dead-lettered. The insert violated
+`alerts.alert_id NOT NULL`, the handler raised, and because SQS redelivers the
+same message failed five times before landing in the DLQ. Noisy, but visible.
+
+A flood alert with no `expires` field was stored successfully and then never
+correlated with a zone, never drawn on the map, and never counted as active. No
+error, no warning, nothing in a log.
+
+**Root cause:** `alert_for_hull()`, `alerts_geojson()` and `counts()` all
+filtered on `a.expires > now()`. That comparison is **NULL, not true**, for a
+row with no expiry, so the row is excluded everywhere.
+
+What makes it wrong rather than merely strict is the source: the collector polls
+`https://api.weather.gov/alerts/active`. Everything it returns is active by
+definition. The system was fetching a feed of active alerts and then filtering
+some of them out as expired on the basis of a field the feed had not supplied.
+
+NWS corroboration is a graded feature and the only cross-source evidence in the
+system, so an alert silently failing to correlate weakens the thing the report
+argues for.
+
+**Fix:** the collector skips an alert with no id and counts it in the poll log,
+because a message that cannot be stored should fail at the producer where the
+cause is legible rather than five receives later in a dead-letter queue. The
+count is logged rather than silent: it should always be zero against the real
+feed, so a non-zero value means the feed shape changed.
+
+For the expiry, the three predicates now read
+`expires > now() OR (expires IS NULL AND updated_at > now() - interval '30 minutes')`.
+
+**No expiry is invented.** The tempting fix was `COALESCE(expires, effective +
+interval '6 hours')`, which puts a fabricated timestamp in the database and is
+the same move as E-026's fabricated zero. NULL is kept, and its meaning is
+"unknown, and the active feed still lists it", bounded by `updated_at`, which
+the upsert refreshes on every poll. An alert that drops out of the feed stops
+being refreshed and ages out after six poll intervals.
+
+**Prevention:** in SQL, a comparison against NULL is not false, it is NULL, and
+a `WHERE` clause discards it exactly as if it were false. Any filter on a
+nullable column silently defines a policy for the NULL case, and that policy is
+always "exclude" unless someone wrote otherwise. When the column is nullable,
+say what NULL means in the predicate or you have chosen by accident.
+
+The related rule, which this shares with E-026: when a value is missing, the
+choice is between recording the absence and inventing a plausible substitute.
+Inventing is always the option that produces confident wrong answers later.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

@@ -366,8 +366,14 @@ def alerts_geojson() -> dict[str, Any]:
             """
             SELECT alert_id, event, severity, headline, expires,
                    ST_AsGeoJSON(geom)::json AS geometry
-            FROM alerts
-            WHERE geom IS NOT NULL AND expires > now()
+            FROM alerts a
+            -- See E-029 and alert_for_hull: NULL expiry means unknown, not
+            -- expired, and the active feed is the authority on whether it
+            -- still applies.
+            WHERE a.geom IS NOT NULL
+              AND (a.expires > now()
+                   OR (a.expires IS NULL
+                       AND a.updated_at > now() - interval '30 minutes'))
             """
         )
         rows = cur.fetchall()
@@ -431,7 +437,11 @@ def counts() -> dict[str, int]:
               (SELECT count(*) FROM readings)                       AS readings,
               (SELECT count(*) FROM zones WHERE state <> 'closed')  AS open_zones,
               (SELECT count(*) FROM advisories)                     AS advisories,
-              (SELECT count(*) FROM alerts WHERE expires > now())   AS active_alerts
+              (SELECT count(*) FROM alerts a
+                WHERE a.expires > now()
+                   OR (a.expires IS NULL
+                       AND a.updated_at > now() - interval '30 minutes'))
+                                                                  AS active_alerts
             """
         )
         return {k: int(v) for k, v in cur.fetchone().items()}

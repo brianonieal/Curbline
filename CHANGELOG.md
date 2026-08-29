@@ -55,6 +55,14 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-029.** An NWS alert with no `expires` field was stored and then never
+  correlated, drawn or counted, because three queries filtered on
+  `expires > now()`, which is NULL rather than true for a NULL column. The
+  collector polls `/alerts/active`, so it was fetching active alerts and then
+  discarding some as expired on the basis of a field the feed had not supplied.
+  NULL now means "active while the feed still lists it", bounded by
+  `updated_at`, with no fabricated expiry. An alert with no id is also skipped
+  at the collector rather than dead-lettering after five receives.
 - **E-028.** `observed_at` was inserted into a `TIMESTAMPTZ` column unparsed.
   A naive timestamp is read in the database server's timezone, and a shift
   larger than the reading window empties every cluster query silently. Latent
@@ -78,7 +86,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 50 tests. 31 to 81. `should_notify`, `sweep_state` and `health_status`
+- 56 tests. 31 to 87. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

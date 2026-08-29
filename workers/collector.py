@@ -71,11 +71,20 @@ def poll_alerts() -> None:
     )
     resp.raise_for_status()
 
-    published = without_geometry = 0
+    published = without_geometry = skipped_no_id = 0
     for feature in resp.json().get("features", []):
         props = feature.get("properties", {}) or {}
         event = props.get("event")
         if event not in FLOOD_EVENTS:
+            continue
+
+        # alert_id is the primary key, so an alert without one cannot be
+        # stored. Publishing it anyway spends five SQS receives failing a NOT
+        # NULL constraint before dead-lettering, for a message that was never
+        # storable. Fail at the producer, where the cause is legible. See E-029.
+        alert_id = props.get("id") or feature.get("id")
+        if not alert_id:
+            skipped_no_id += 1
             continue
 
         geometry = feature.get("geometry")
@@ -85,7 +94,7 @@ def poll_alerts() -> None:
         aws.send(config.QUEUE_INGEST, {
             "kind": "alert",
             "ingest_id": str(uuid.uuid4()),
-            "alert_id": props.get("id") or feature.get("id"),
+            "alert_id": alert_id,
             "event": event,
             "severity": props.get("severity"),
             "headline": props.get("headline"),
@@ -95,8 +104,11 @@ def poll_alerts() -> None:
         })
         published += 1
 
-    log.info("published %d flood alerts (%d had no polygon)",
-             published, without_geometry)
+    # skipped_no_id is logged rather than silent: it should always be zero
+    # against the real NWS feed, so a non-zero count means the feed shape
+    # changed and the report's alert numbers need re-checking.
+    log.info("published %d flood alerts (%d had no polygon, %d skipped: no id)",
+             published, without_geometry, skipped_no_id)
 
 
 def main() -> int:
