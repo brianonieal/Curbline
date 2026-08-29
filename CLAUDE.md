@@ -4,7 +4,7 @@ Project instructions for Claude Code. Read this before touching anything.
 
 **Project:** Curbline, street-flood zone detection for New York City
 **Owner:** Brian Onieal
-**Current version:** v0.4.1
+**Current version:** v0.7.0
 **Deadline:** JHU cloud computing Individual Project, end of Module 7
 **Governing skill:** build-rules (Blueprint v10), with the deviations recorded below
 
@@ -100,8 +100,10 @@ exit criteria must still hold. If a change breaks an earlier gate, that is a
 stop, not a note.
 
 **Tests before build.** Per the testing skill: write the failing test, then
-build. `TESTS.md` is the registry. 26 tests currently pass and none touch a
-real AWS account. Keep it that way; moto for everything.
+build. `TESTS.md` is the registry. 95 tests currently pass and none touch a
+real AWS account. Keep it that way. Know what the stand-ins actually are:
+moto covers SQS in two tests, SNS and S3 are patched with `unittest.mock`, and
+nothing runs against live PostgreSQL, so every line of SQL here is unexercised.
 
 **Log decisions with flip conditions.** Every entry in `DECISIONS.md` carries a
 `Flips if:` line naming a specific observable trigger, not a risk. "Flips if
@@ -120,15 +122,18 @@ public repo, rotate it; deleting the commit is not sufficient.
 ## Commands
 
 ```bash
+# Setup. A fresh clone has no .venv and nothing below works without it.
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
 # Frontend work, no AWS required
 .venv/bin/python api/mock_server.py          # http://localhost:8000
 
-# Tests
-python3 -m pytest tests/ -q
+# Tests. The venv interpreter, never bare python3: see TESTS.md.
+.venv/bin/python -m pytest tests/ -q
 
 # Gate close check. Hard-blocks on failing tests, staged secrets,
 # banned technologies, and decisions missing a Flips if: line.
-./scripts/gate-check.sh v0.5.0
+./scripts/gate-check.sh v0.7.0
 
 # Provision (on EC2, with the instance role attached)
 # CURBLINE_ADMIN_CIDR is YOUR address, read from your own machine, not
@@ -140,7 +145,7 @@ sudo systemctl status 'curbline-*'
 journalctl -u curbline-correlator -f
 
 # Teardown. Not optional.
-python3 infra/teardown.py --confirm
+.venv/bin/python infra/teardown.py --confirm
 ```
 
 ---

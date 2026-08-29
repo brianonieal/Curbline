@@ -10,6 +10,99 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow
 Evidence and documentation work between the v0.5.0 run and the v0.7.0 capture
 session. No pipeline behaviour changed except the cache stats transport.
 
+### Changed, 2026-08-29, pre-window corrections
+
+Documentation only. No source file changed except `curbline/__init__.py`'s
+version string. Made ahead of a hard-bounded 2-hour capture window, so every
+item here is something that would have cost time or credibility inside it.
+
+- **Version drift closed.** `CLAUDE.md` and `curbline/__init__.py` both read
+  `0.4.1` while `VERSION_ROADMAP.md` had v0.7.0 open. `__init__.py` is the one
+  that mattered: it is a runtime string that can surface in a console capture or
+  a report header, not only a document a reader misinterprets. Historical
+  references to 0.4.1 in `CHANGELOG.md`, `MANIFEST.txt`, `CONSOLIDATION.md`,
+  `RETENTION.md`, `TIMELOG.md` and `.gitignore` are records of a past event and
+  were deliberately left alone.
+- **`TESTS.md` class table reconciles to 95 again.** It documented 16 classes
+  totalling 67. Five classes were never registered
+  (`TestRecessionIsDrivenByAbsence`, `TestAdvisorySuppression`,
+  `TestHealthVerdict`, `TestWorkerHeartbeat`, `TestEnvFileContract`) and
+  `TestSourceCalibration` was recorded at 3 against an actual 6. Four of the
+  five cover E-020, E-021 and E-023, so the registry was missing most of the
+  boundary audit; the fifth, `TestEnvFileContract`, covers the `.env` contract
+  `bootstrap.sh` depends on and carries no E-number. A total row now makes the
+  reconciliation checkable at a glance.
+- **The moto claim was an overstatement and is corrected in all seven live
+  assertions of it.** `mock_aws()` appears once in the suite, in the
+  module-level `sqs_queue` fixture, and covers SQS in two tests; SNS and S3 are
+  patched with `unittest.mock`, so `TestAuditOrdering` proves call ordering and
+  nothing about the objects produced. The claim was corrected in `TESTS.md`,
+  `CLAUDE.md`, `ERRORS.md` (the E-013 prevention note), `docs/REPORT.md`
+  sections 6.2 and 7, in the header comment of `scripts/preflight.py`, and in
+  the module docstring of `tests/test_pipeline.py`,
+  which is the file a reader opens to check the registry and which carried the
+  original sentence verbatim. The sealed historical entry at `CHANGELOG.md`
+  under v0.5.0 is left alone, because it records what was believed then.
+  Every corrected location now also states that no test executes against live
+  PostgreSQL, so every line of SQL in the project is unexercised by the suite.
+- **The venv trap is closed in the run book.** `TESTS.md`, `CLAUDE.md` and
+  `infra/SETUP.md` each told the reader to run `.venv/bin/python`, and a fresh
+  clone has no `.venv`, so the documented command failed on a new capture host.
+  Each now carries the create-and-install line first. `CLAUDE.md` also stopped
+  recommending bare `python3` for pytest, which contradicted `TESTS.md`'s own
+  warning. `infra/SETUP.md`'s claim that gate-check defaults to bare `python3`
+  was two commits stale, and its "26 passed" was two gates stale.
+- **`DEMO.md`'s capture session is rewritten for a 2-hour window.** The teardown
+  rehearsal is dropped, which also removes the hazard that rehearsing teardown
+  destroys a confirmed SNS subscription along with its topic. Captures cut from
+  22 to 11, chosen by rubric points with no committed substitute.
+- **`docs/REPORT.md` Appendix C marks the 11 skipped captures rather than
+  dropping them**, each with a reason and the committed substitute where one
+  exists. Three have no substitute and say so. Screenshot paths now match where
+  the run book tells you to save them.
+- **Two arithmetic errors corrected in section 6.3.** It claimed twenty-five
+  logged defects against an actual thirty-four, and described E-020 through
+  E-034 as "six" when the range is fifteen.
+- **E-035 added**, recording the dropped teardown rehearsal as an accepted risk
+  with its mitigation, rather than leaving it as an undocumented schedule cut.
+  Its line count was corrected before commit: commit `3c8c83f` added 98 lines
+  and deleted 24, and the 122 in the diffstat bar is insertions plus deletions,
+  not surviving lines.
+
+### Caught by the pre-commit verification pass, listed because they were nearly shipped
+
+The edits above were reviewed adversarially before commit. Seven defects in the
+edits themselves were found and fixed. They are recorded rather than quietly
+folded in, because the pattern in them is the same one E-013, E-017 and E-019
+share: a correction applied in the place you were looking and not in the places
+that repeat the claim.
+
+- **The moto correction was applied in two files and asserted as complete.** It
+  appeared in seven. The worst survivor was the module docstring of
+  `tests/test_pipeline.py`, the file a reader opens to verify the registry.
+- **`DEMO.md`'s rewritten run book invoked `.venv`-only scripts with bare
+  `python3`**, in the same change whose stated purpose was closing that exact
+  trap. `preflight.py` imports psycopg and `teardown.py` imports boto3, and
+  `bootstrap.sh` installs neither outside the venv. Both would have died with
+  `ModuleNotFoundError`, one of them at 0:25 and the other at teardown, which is
+  the step whose failure keeps RDS billing.
+- **Two Appendix C substitute claims were false.**
+  `docs/evidence/cli/ec2-instance.txt` was cited as recording the attached IAM
+  role and contains no role, profile or ARN. `sqs-ingest.json` and
+  `sqs-zones.json` were cited as carrying queue depths that prove decoupling and
+  both read `ApproximateNumberOfMessages: 0`. Both rows now say what the file
+  actually contains.
+- **Appendix C claimed eleven captures in the past tense** with no screenshot on
+  disk in any branch. Rewritten to state scope rather than accomplishment, with
+  an instruction to check the files before submitting.
+- **The pre-teardown checklist still gated teardown on captures the same change
+  had dropped**, including six AWS console shots and the status bar.
+- **`CLAUDE.md` kept a test count of 26** while the same commit corrected that
+  identical number to 95 in `infra/SETUP.md`.
+- **`TESTS.md` named the wrong location for `mock_aws()`**, placing it inside
+  `TestWorkerLoop` when it is in the module-level `sqs_queue` fixture, in a
+  passage whose whole purpose was precision.
+
 ### Fixed
 - **E-019, the dashboard cache hit rate.** Counters are published to Redis under
   `stats:cache:*` and drained from the worker loop between batches, so the API

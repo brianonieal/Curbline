@@ -4,7 +4,7 @@ Run every external dependency once, before trusting the pipeline.
 
 Why this exists. E-013 was a function PostgreSQL would not resolve because
 psycopg sent double precision where the signature declared numeric. E-017 was a
-UUID compared against a string. Both were invisible to a moto-only test suite,
+UUID compared against a string. Both were invisible to a suite that never runs SQL,
 both were found by a human watching a dashboard fail to tick, and between them
 they cost most of a day. Neither would have survived thirty seconds of this.
 

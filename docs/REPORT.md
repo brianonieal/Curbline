@@ -435,9 +435,16 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-95 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
-stubbed. **No test touches a real AWS account or incurs spend**, which is
-enforced mechanically by `scripts/gate-check.sh` at every gate close.
+95 tests, all passing. **No test touches a real AWS account or incurs spend**,
+which is enforced mechanically by `scripts/gate-check.sh` at every gate close.
+
+What substitutes for what is worth stating precisely, because the obvious
+summary overstates it. moto covers SQS, in two tests. SNS and S3 are not
+simulated at all: they are patched with `unittest.mock`, so `TestAuditOrdering`
+proves the dispatcher calls them in the right order and proves nothing about
+whether a valid object or message is produced. No test executes against live
+PostgreSQL, so **every line of SQL in this system is unexercised by this
+suite**. Section 6.2's closing paragraph is the consequence, not an aside.
 
 Coverage targets the four paths that actually break in a queue pipeline: the
 happy path, duplicate delivery, a failing downstream, and a cold cache.
@@ -451,7 +458,7 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestWorkerLoop` | 2 | Delete only after success; failed handler leaves the message for retry |
 | `TestAuditOrdering` | 2 | S3 write precedes SNS publish; failed audit blocks the notification |
 | `TestAlertFiltering` | 2 | Null-geometry alerts survive ingest; non-flood events dropped |
-| `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and the fallback for an unknown source |
+| `TestSourceCalibration` | 6 | D-005 threshold mapping per source, that every buildable source has its own thresholds, and the fallback for an unknown source |
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone id still matches the string in the queue body |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries once |
 | `TestCacheStatsTransport` | 5 | E-019: counters publish and clear, a failed flush retains them, and an unknown hit rate reads null rather than zero |
@@ -464,10 +471,12 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestReadingTimestamps` | 8 | E-028: an offset is required and normalised to UTC on the type itself, and one bad gauge skips its reading rather than the poll |
 | `TestAuditProvenance` | 3 | E-027: the record names the parameters that produced the cluster, and a substituted value says it was substituted |
 | `TestUSGSBaselinePersistence` | 9 | E-026: the datum survives a restart, and a site with no datum is withheld rather than reported as zero rise |
+| `TestEnvFileContract` | 3 | The `.env` contract `bootstrap.sh` depends on: the generated password parses under an unquoted shell assignment, excludes what RDS rejects, and round-trips through dotenv |
+| **Total** | **95** | |
 
-**What this suite could not catch, stated rather than hidden.** The suite is
-moto throughout and never executed SQL against a real PostGIS instance or
-exercised psycopg's type mapping. Two defects lived in exactly that blind spot
+**What this suite could not catch, stated rather than hidden.** The suite
+patches the database layer out entirely and never executed SQL against a real
+PostGIS instance or exercised psycopg's type mapping. Two defects lived in exactly that blind spot
 until the system first ran against real managed services, and six more were
 found afterwards by auditing for their shape rather than waiting for them:
 
@@ -539,11 +548,13 @@ have not yet been observed end to end on real managed services.
 
 ### 6.3 Evidence
 
-Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
-nine found during the first end-to-end run against real infrastructure
-(E-009 through E-017), and six found afterwards by the boundary audit described
-in section 6.2 (E-020 through E-034). Two came from the evidence capture
-session itself: E-018,
+Appendix C records which captures were taken and which were skipped, with a
+reason for each. Thirty-four defects are logged in `ERRORS.md`, plus one
+accepted risk (E-035): eight from design and build before any infrastructure
+existed (E-001 through E-008), nine found during the first end-to-end run
+against real infrastructure (E-009 through E-017), and fifteen found afterwards
+by the boundary audit described in section 6.2 (E-020 through E-034). Two came
+from the evidence capture session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
 on a working cache because the counter was a module-level dictionary in the
@@ -677,7 +688,8 @@ geometry and attach it, so the products currently stored with a NULL geometry ca
 correlate like any other.
 
 **Test against a real PostgreSQL in CI.** E-013 and E-017 were both invisible to
-a moto-only suite and both were found by a human running the system. A
+a suite that never executes SQL, and both were found by a human running the
+system. A
 containerised Postgres is not available under this assignment's constraints, but
 a hosted instance in a test account would have caught both in minutes.
 
@@ -753,50 +765,72 @@ Every screenshot states which data source produced it. Captures marked
 replays here and in `curbline/sources.py`. Captures showing the advisory ladder
 used `replay.escalation.json`; earlier captures used `replay.example.json`.
 Limitation 9 explains why two fixtures exist.
-Captures marked **usgs** are live gage data.
+No capture in the reduced set is live gage data. Every capture that shows
+detection output is a replay, and the console baseline that ran against live
+USGS on a dry day is one of the eleven skipped. Limitation 9 is the place that
+matters for this: the detector has never been shown firing on real water.
 
+**Eleven of twenty-two captures are in scope. Eleven are skipped.** The capture
+session runs in a single 2-hour window against an hourly-billing stack, and the
+set was cut to the rubric categories with no committed substitute. The skipped
+rows are kept below with a reason each rather than deleted: a deleted row is one
+no reader can audit, and a report that silently lists only what it managed to
+collect is claiming a completeness it does not have.
 
-### Cloud integration (10 pts)
+**Check the `captured` rows against `docs/evidence/screenshots/` before
+submitting.** A row marked captured whose file is absent means the session did
+not finish, not that the row is satisfied.
 
-| File | Source | Caption |
-|---|---|---|
-| `screenshots/cloud-rds.png` | aws-console | RDS console: instance `curbline-db`, status Available, engine PostgreSQL |
-| `screenshots/cloud-elasticache.png` | aws-console | ElastiCache console: cluster `curbline-cache`, status Available |
-| `screenshots/cloud-sqs.png` | aws-console | SQS console: all four queues, showing messages available |
-| `screenshots/cloud-sns.png` | aws-console | SNS console: topic with a confirmed subscription |
-| `screenshots/cloud-s3.png` | aws-console | S3 console: audit bucket with objects under `advisories/` |
-| `screenshots/cloud-ec2.png` | aws-console | EC2 console: the instance, with its IAM role attached |
+Of the eleven skipped rows, five have a committed substitute in this repository
+that carries the same claim, four have no substitute at all, and two have a
+substitute weaker than the capture it replaces. Every row says which it is.
 
-### Distributed application (10 pts)
+### Cloud integration (10 pts): 3 of 6
 
-| File | Source | Caption |
-|---|---|---|
-| `screenshots/dist-systemctl.png` | cli | `systemctl status 'curbline-*'` with all four units active |
-| `screenshots/dist-collector-journal.png` | replay | `journalctl -u curbline-collector` showing readings published |
-| `screenshots/dist-correlator-journal.png` | replay | `journalctl -u curbline-correlator` showing clusters published |
-| `screenshots/dist-dispatcher-journal.png` | replay | `journalctl -u curbline-dispatcher` showing an advisory with its audit key |
-| `screenshots/dist-queue-depth.png` | replay | SQS queue depth non-zero, the visible proof the stages are decoupled |
+| File | Source | Status | Caption or reason |
+|---|---|---|---|
+| `docs/evidence/screenshots/cloud-rds.png` | aws-console | captured | RDS console: instance `curbline-db`, status Available, engine PostgreSQL |
+| `docs/evidence/screenshots/cloud-elasticache.png` | aws-console | captured | ElastiCache console: cluster `curbline-cache`, status Available |
+| `docs/evidence/screenshots/cloud-sqs.png` | aws-console | captured | SQS console: all four queues, showing messages available |
+| `cloud-sns.png` | — | **skipped** | No substitute for the console tab. The confirmed subscription is established instead by `preflight.py` passing, which fails on any `PendingConfirmation`, and by the advisory email arriving |
+| `cloud-s3.png` | — | **skipped** | Substitute: `docs/evidence/cli/s3-advisories.txt`, which lists the committed objects under `advisories/` |
+| `cloud-ec2.png` | — | **skipped** | Partial substitute: `docs/evidence/cli/ec2-instance.txt` records the instance id, type, launch time and state, but **not** the attached IAM role. The role is evidenced instead by the fact that every `aws` call in `capture-evidence.sh` succeeds from the instance with no credentials in `.env` |
 
-### Technology components (15 pts)
+### Distributed application (10 pts): 4 of 5
 
-| File | Source | Caption |
-|---|---|---|
-| `screenshots/tech-postgis-version.png` | cli | `SELECT PostGIS_Full_Version();` output |
-| `screenshots/tech-current-clusters.png` | replay | `SELECT * FROM current_clusters();` returning real zones |
-| `screenshots/tech-redis-keyspace.png` | replay | `redis-cli INFO keyspace` showing cached sensor keys |
-| `screenshots/tech-sns-email.png` | — | The received SNS email |
-| `screenshots/tech-s3-audit-object.png` | replay | One S3 audit object opened, showing the thresholds recorded alongside the decision |
+| File | Source | Status | Caption or reason |
+|---|---|---|---|
+| `docs/evidence/screenshots/dist-systemctl.png` | cli | captured | `systemctl status 'curbline-*'` with all four units active |
+| `docs/evidence/screenshots/dist-collector-journal.png` | replay | captured | `journalctl -u curbline-collector` showing readings published |
+| `docs/evidence/screenshots/dist-correlator-journal.png` | replay | captured | `journalctl -u curbline-correlator` showing clusters published, and the cache hit rate |
+| `docs/evidence/screenshots/dist-dispatcher-journal.png` | replay | captured | `journalctl -u curbline-dispatcher` showing an advisory with its audit key |
+| `dist-queue-depth.png` | — | **skipped** | Partial substitute: `docs/evidence/cli/sqs-ingest.json` and `sqs-zones.json` record both queues with their attributes, but both read `ApproximateNumberOfMessages: 0`, captured when the pipeline was idle. They prove the queues exist and are separately addressed; they do not show messages in flight. Decoupling is evidenced instead by the three journals showing each stage advancing independently |
 
-### End-to-end (30 pts)
+### Technology components (15 pts): 0 of 5
 
-| File | Source | Caption |
-|---|---|---|
-| `screenshots/e2e-console-baseline.png` | usgs | Console with zero zones (baseline, live USGS run on a dry day) |
-| `screenshots/e2e-console-active-zone.png` | replay | Console with an active zone drawn, rail filled, advisory queued |
-| `screenshots/e2e-console-depth-change.png` | replay | Same zone before and after, showing depth change on the rail |
-| *(unmet)* | — | A zone with `NWS confirmed`: 0 active flood alerts in the NYC bounding box during the capture window; the corroboration path is unit-tested but not shown in a live screenshot |
-| `screenshots/e2e-console-status-bar.png` | replay | Status bar showing queue depth, a non-zero cache hit rate, and PostGIS up |
-| `screenshots/e2e-api-health.png` | cli | `curl /api/health` output |
-| `screenshots/e2e-cache-degraded.png` | replay | Stop ElastiCache, reload the console, show it still working with the cache pip amber |
+This category is carried entirely by committed files rather than images. That
+is a real weakness in the evidence and is stated here rather than absorbed.
 
-*Unmet captures are listed with the reason rather than removed. See section 7.*
+| File | Source | Status | Caption or reason |
+|---|---|---|---|
+| `tech-postgis-version.png` | — | **skipped** | No committed substitute for the version string. `preflight.py` asserts the PostGIS extension resolves, which is the load-bearing half of the claim |
+| `tech-current-clusters.png` | — | **skipped** | Substitute: `docs/evidence/cli/current-clusters-query.sql`, the committed query, run against live PostGIS on 2026-08-28 |
+| `tech-redis-keyspace.png` | — | **skipped** | No committed substitute. Cache liveness is carried by the hit rate visible in `dist-correlator-journal.png` |
+| `tech-sns-email.png` | — | **skipped** | No committed substitute. The subscription was confirmed and the email received during the session; only the screenshot was dropped. The notification path is not unproven, it is unphotographed |
+| `tech-s3-audit-object.png` | — | **skipped** | Substitute: the six records committed under `docs/evidence/audit/`. Those files are the artifact the dispatcher wrote; a screenshot would only prove a JSON file was displayed |
+
+### End-to-end (30 pts): 4 of 6
+
+| File | Source | Status | Caption or reason |
+|---|---|---|---|
+| `docs/evidence/screenshots/e2e-console-active-zone.png` | replay | captured | Console with an active zone drawn, rail filled, advisory queued |
+| `docs/evidence/screenshots/e2e-console-depth-change.png` | replay | captured | The same zone escalating: the advisory ladder, `monitor` then `advisory` then `warning`. This is the E-021 fix observed in the UI rather than only in unit tests |
+| `docs/evidence/screenshots/e2e-api-health.png` | cli | captured | `curl /api/health`, including the `degraded` verdict with a component stopped |
+| `docs/evidence/screenshots/e2e-cache-degraded.png` | replay | captured | Cache unreachable: console still serving, pip amber, `/api/health` degraded |
+| `e2e-console-baseline.png` | — | **skipped** | Covered by another capture. `e2e-console-active-zone.png` shows the same console chrome with data in it, and the zero-zone state is the least informative capture in the set |
+| `e2e-console-status-bar.png` | — | **skipped** | The cache hit rate it existed to show is carried by `dist-correlator-journal.png`. Captured early it reads `n/a` legitimately, because the correlator publishes counters to Redis only between batches (E-019), which would have looked like a failed criterion rather than a warm-up |
+| *(unmet)* | — | **unmet** | A zone with `NWS confirmed` beside one without. Needs an active NWS flood alert intersecting a zone footprint during the capture window; there were zero in the NYC bounding box. The corroboration path is unit-tested but never shown live. No polygon was fabricated to force it |
+
+*Skipped rows are listed with the reason rather than removed. The one row marked
+unmet is unmet for a reason outside this project's control, which is a different
+claim from skipped for time. See section 7.*

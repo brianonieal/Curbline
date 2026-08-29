@@ -1,6 +1,8 @@
 """
-Unit tests. None of these touch a real AWS account or incur spend: moto stands
-in for SQS, SNS and S3, and the database layer is stubbed.
+Unit tests. None of these touch a real AWS account or incur spend. moto covers
+SQS in two tests, via the sqs_queue fixture. SNS and S3 are not simulated: they
+are patched with unittest.mock. The database layer is patched out entirely, so
+no SQL in this project is executed by this suite.
 
 Coverage targets the four paths that actually break in a queue pipeline:
 the happy path, duplicate delivery, a failing downstream, and a cold cache.

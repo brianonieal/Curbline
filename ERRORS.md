@@ -289,8 +289,8 @@ feet.
 **Prevention:** "function does not exist" from PostgreSQL means no candidate
 matched the argument types, not that the name is absent. Read the parenthesised
 types in the message before assuming the schema failed to load. This class of
-bug is invisible to the current test suite, which uses moto throughout and never
-executes SQL against a real PostGIS instance. That is a real coverage gap, not
+bug is invisible to the current test suite, which patches the database layer
+out entirely and never executes SQL against a real PostGIS instance. That is a real coverage gap, not
 an oversight to hide: the first time this query ran against Postgres was in
 production on the graded instance.
 
@@ -1138,8 +1138,72 @@ that says what it is called.
 
 ---
 
+## E-035 - Teardown rehearsal dropped for time, on a teardown script that has never run in its current form
+**Found:** 2026-08-29, v0.7.0 | **Status:** ACCEPTED RISK | **Cost:** none yet; the failure mode is an RDS instance and an ElastiCache cluster billing hourly after the session is believed finished
+
+**Symptom:** none observed. This entry records a risk accepted deliberately
+before the capture window, so that if it fires there is something to find by
+searching rather than a decision nobody wrote down.
+
+**What was dropped.** The planned session provisioned, immediately ran
+`teardown.py --confirm` against the fresh stack to prove the script works while
+nothing was at stake, then re-provisioned the stack it would actually capture
+from. That is roughly thirty minutes and a second RDS creation, against a
+two-hour budget. It was cut.
+
+Dropping it also removed a hazard the rehearsal itself introduced.
+`teardown.py` deletes the SNS topic, and deleting a topic deletes its
+subscriptions. A confirmation clicked against the first stack would have died
+with the rehearsal, and AWS does not resend a confirmation link. The rehearsal
+therefore had to sit before the SNS step, which pushed the single most
+slip-prone item in the run book later into the window rather than earlier.
+
+**Root cause of the exposure:** `infra/teardown.py` is 244 lines with no
+automated test. Commit `3c8c83f` on 2026-08-28 added 98 lines and deleted 24
+(`git show --numstat 3c8c83f -- infra/teardown.py`), so roughly 40 percent of
+the current file has never executed. The diffstat bar reads 122, which is
+insertions plus deletions and not a count of surviving lines; the honest number
+is 98. One E-number, three distinct behavioural changes bundled in it:
+
+1. Billable resources are deleted first. RDS and ElastiCache now go before the
+   queues, the topic and the bucket, so an error on a free deletion can no
+   longer abort the run with the hourly-billing resources still up.
+2. An ElastiCache error is no longer read as "already gone".
+3. Verification gates the `stack.json` unlink, and the exit code carries the
+   answer, so the record cannot be discarded while the resources it names
+   survive.
+
+Worth stating precisely, because the neighbouring E-numbers are elsewhere:
+**E-032 is in `scripts/gate-check.sh` and E-034 is in `infra/provision.py`.**
+Only E-033 is in `teardown.py`. An earlier version of `teardown.py` did run
+successfully on 2026-08-28; the version in the repository now did not.
+
+**Mitigation, which is the whole of what makes this acceptable.** Three steps,
+and the second is the one that actually catches a failure:
+
+1. Verify by console immediately after teardown, with `--region us-east-1`
+   pinned on every call. An empty result from an unpinned call is worth nothing.
+   See E-018.
+2. **Check the AWS billing dashboard the following morning, before anything
+   else.** Console verification runs seconds after deletion, when a resource
+   mid-delete can already read as absent. Billing is the check that sees a
+   resource that came back or never left, and it is the reason this risk is
+   accepted rather than merely noted.
+3. Delete by hand if anything survived, then log what survived here.
+
+**Prevention:** **a script whose failure mode is an open-ended bill earns a
+rehearsal, and dropping that rehearsal is a schedule decision, not a technical
+one.** It was taken here because the window is hard-bounded and the mitigation
+is cheap, late, and reliable. The general rule is not "skip the rehearsal", it
+is that a rehearsal may be traded for a verification step only when the
+verification actually runs at a time when it can still see the failure. Console
+verification at teardown plus one seconds-long check is not that. The next
+morning's billing dashboard is.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
-**Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
+**Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION / ACCEPTED RISK] | **Cost:** [time lost]
 
 **Symptom:** [what you actually observed]
 **Root cause:** [why, not what]

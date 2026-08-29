@@ -170,16 +170,18 @@ If your address changes, re-run with a corrected `--admin-cidr`.
 
 ## Running gate-check
 
-`scripts/gate-check.sh` defaults to bare `python3`, which will not have this
-project's dependencies and reports a **false hard block on the test suite**.
-Point it at the venv:
+`scripts/gate-check.sh` now finds `.venv/bin/python` (or `.venv/Scripts/python.exe`)
+on its own, and hard-blocks with a named reason if the interpreter it picks
+cannot import pytest. It cannot silently fall through to a bare `python3` any
+more. What it cannot do is create the venv, and a fresh clone has none:
 
 ```bash
-PYTHON=.venv/bin/python ./scripts/gate-check.sh v0.5.0
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+./scripts/gate-check.sh v0.7.0
 ```
 
-Verified: bare interpreter reports 18 failed and 4 errors, venv interpreter
-reports 26 passed. The tests are fine; the interpreter was wrong.
+Verified: a bare interpreter reports 18 failed and 4 errors, the venv
+interpreter reports 95 passed. The tests are fine; the interpreter was wrong.
 
 ---
 

@@ -1,14 +1,28 @@
 # TESTS
 
 Registry per the testing skill. No test in this suite touches a real AWS
-account or incurs spend: moto stands in for SQS, SNS and S3, and the database
-layer is stubbed.
+account or incurs spend. What actually stands in for what, stated precisely
+because the previous wording claimed more coverage than exists:
+
+- **moto covers SQS, in two tests.** `mock_aws()` appears exactly once in the
+  suite, in the module-level `sqs_queue` fixture that `TestWorkerLoop` consumes.
+- **SNS and S3 are not simulated at all.** They are patched out with
+  `unittest.mock.patch.object` on `aws.publish` and `aws.write_audit`. So
+  `TestAuditOrdering` proves the dispatcher calls them in the right order and
+  proves nothing about whether a valid S3 object or SNS message is produced.
+- **Zero tests execute against live PostgreSQL.** Every database call is
+  patched, so **all SQL in this project is unexecuted by this suite**: both
+  stored functions, the `open_zones()` lateral, and every write path. The
+  fixture below is the only thing that runs real SQL and it is run by hand.
+
+That gap is not incidental. E-013 and E-017 both passed every test and both
+broke the system in production. v1.2.5 exists to close it.
 
 **Current: 95 Python passing, 0 failing. Plus 18 console checks in
 `tests/console_smoke.js`, run by `gate-check.sh`.**
 
-The console had no automated coverage at all until 2026-08-28, and seven of the
-twenty-two evidence screenshots are the console. `console_smoke.js` loads
+The console had no automated coverage at all until 2026-08-28, and three of the
+eleven captures in the reduced evidence set are the console. `console_smoke.js` loads
 `web/app.js` into a stubbed DOM and MapLibre and drives `apply()` through the
 payload shapes the API actually produces, including the degraded ones: an
 unreachable cache, a database down, a queue probe returning -1, a null sensor
@@ -19,6 +33,8 @@ checks. A harness that cannot catch the regression it was written for is the
 E-020 mistake in a different language.
 
 ```bash
+# A fresh clone has no .venv, so on a new host this line is not optional.
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest tests/ -q
 ```
 
@@ -40,7 +56,7 @@ documents for `scripts/gate-check.sh`.
 | `TestWorkerLoop` | 2 | Delete only after success; failed handler leaves the message for retry |
 | `TestAuditOrdering` | 2 | S3 write precedes SNS publish; failed audit blocks the notification |
 | `TestAlertFiltering` | 2 | Null-geometry alerts survive ingest; non-flood events dropped |
-| `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and that an unrecognised source falls back to the sensitive calibration |
+| `TestSourceCalibration` | 6 | D-005 threshold mapping per source, that every buildable source has its own thresholds, and that an unrecognised source falls back to the sensitive calibration and is rejected rather than guessed |
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone_id from the database still matches the string in the queue body, so a forming zone promotes |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries the insert once |
 | `TestEscalationFixture` | 5 | E-030: replay.example.json cannot produce an advisory ladder because membership changes per tier; these assert replay.escalation.json can |
@@ -49,6 +65,12 @@ documents for `scripts/gate-check.sh`.
 | `TestAuditProvenance` | 3 | E-027: the audit record names the parameters the correlator actually clustered with, and discloses a fallback rather than substituting silently |
 | `TestUSGSBaselinePersistence` | 9 | E-026: the baseline survives a restart via Redis, a failed lookup backs off, and a site with no datum is withheld rather than published as a zero rise |
 | `TestCacheStatsTransport` | 5 | E-019: counters publish to Redis and clear, a failed flush retains the deltas rather than under-reporting the incident that caused it, and an unknown hit rate reads null rather than 0.0 |
+| `TestRecessionIsDrivenByAbsence` | 7 | E-020: a zone the pipeline can actually produce can never recede on sensor count, so recession is swept on a timer instead. A stale active zone recedes, a stale receding zone closes, a closed zone is left alone, and the staleness window exceeds the reading window |
+| `TestAdvisorySuppression` | 6 | E-021: an escalation notifies even when state and corroboration are unchanged, an unchanged level stays suppressed, new corroboration notifies, and a forming zone never notifies |
+| `TestHealthVerdict` | 5 | E-023: one stopped worker degrades the whole system, every worker dead is not `ok`, unknown liveness does not degrade, and a database outage outranks everything |
+| `TestWorkerHeartbeat` | 4 | E-023: a heartbeat key expires, a silent worker reads as not live, an unreachable cache reports unknown rather than dead, and `beat()` never raises into the pipeline |
+| `TestEnvFileContract` | 3 | The `.env` contract `bootstrap.sh` depends on: the generated password's alphabet is safe for an unquoted shell assignment, excludes what RDS rejects, and round-trips through dotenv parsing |
+| **Total** | **95** | Reconciles to the headline count above. If these disagree, the table is stale, not the suite |
 
 ## Integration fixture — `tests/fixture_clusters.sql`
 
