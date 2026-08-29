@@ -14,9 +14,22 @@ SOURCE DATASETS, both NYC Open Data, downloaded 2026-08-29:
       Nothing here is interpolated or synthesised; these are the samples
       FloodNet recorded.
 
-  FloodNet: Sensor Deployment Metadata
+  FloodNet: Sensor Deployment Metadata      (NYC Open Data ag7h-2pg6)
+      https://data.cityofnewyork.us/Environment/Floodnet-Sensor-Deployment-Metadata/ag7h-2pg6
       479 rows. The events file carries NO coordinates, so location comes
-      from here, joined on "Sensor ID".
+      from here, joined on "Sensor ID". It also carries Date Installed and
+      Date Removed, which reconstruct the network that was live on any given
+      date: 313 sensors were deployed and not yet removed on 2025-10-30, of
+      which 126 recorded a flood event.
+
+NO DRY SENSORS. The other 187 sensors that were live that day are NOT in this
+fixture, so every sensor on the map is one that flooded. That is a property of
+the source: the events dataset records floods, not quiet periods, so a live
+sensor that stayed dry produces no row and therefore no reading. Their absence
+could be inferred into a 0.0 reading, and deliberately is not: absence of a
+flood event is evidence a sensor stayed under the event trigger, not a
+measurement that it read zero. Inventing the measurement is the one thing this
+whole conversion exists to avoid.
 
 EVENT SELECTED: 2025-10-30, the largest multi-sensor day in the download.
 109 sensors crossed 5 cm; 126 have samples in the window

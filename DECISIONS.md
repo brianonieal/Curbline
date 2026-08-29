@@ -294,7 +294,7 @@ home, and at that point move all of them rather than splitting the transport.
 **Decision:** the demo replays `data/replay.floodnet.json`, built by
 `data/convert_floodnet.py` from two NYC Open Data downloads: *FloodNet: Street
 Flooding Events Measured by FloodNet Sensors* and *FloodNet: Sensor Deployment
-Metadata*. The event is **2025-10-30**, the largest multi-sensor day in the
+Metadata* (`ag7h-2pg6`). The event is **2025-10-30**, the largest multi-sensor day in the
 download, 17:23 to 01:44 GMT. Real sensor ids, real coordinates, real recorded
 depths. `replay.example.json` and `replay.escalation.json` stay as they are.
 
