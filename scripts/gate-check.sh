@@ -192,14 +192,30 @@ echo "Cost"
 # ---------------------------------------------------------------------------
 
 if command -v aws >/dev/null 2>&1; then
-  RDS=$(aws rds describe-db-instances \
+  # --region is not optional. RDS and ElastiCache are regional, and an
+  # unpinned call answers for whatever region the caller happens to default
+  # to. That returns zero from the wrong region and reads as a clean teardown
+  # on a stack that is still billing, which is E-018 exactly, and it already
+  # produced one false teardown report on this project.
+  RDS=$(aws rds describe-db-instances --region us-east-1 \
           --query 'length(DBInstances[?DBInstanceStatus==`available`])' \
           --output text 2>/dev/null || echo "?")
-  CACHE=$(aws elasticache describe-cache-clusters \
+  CACHE=$(aws elasticache describe-cache-clusters --region us-east-1 \
           --query 'length(CacheClusters[?CacheClusterStatus==`available`])' \
           --output text 2>/dev/null || echo "?")
-  echo "  billable now: RDS=$RDS  ElastiCache=$CACHE"
-  if [ "$GATE" = "v1.0.0" ] && { [ "$RDS" != "0" ] || [ "$CACHE" != "0" ]; }; then
+  echo "  billable now (us-east-1): RDS=$RDS  ElastiCache=$CACHE"
+
+  if [ "$RDS" = "?" ] || [ "$CACHE" = "?" ]; then
+    # Unknown is a third state and must not be reported as either answer. The
+    # old code compared != "0", so a failed call became "requires teardown",
+    # which sends someone to re-run teardown on an already-empty account when
+    # the real problem is credentials or region.
+    if [ "$GATE" = "v1.0.0" ]; then
+      fail "cannot verify nothing is billable: the AWS calls did not answer. Check credentials and region. Unverified is not torn down."
+    else
+      warn "cost check could not reach AWS (credentials or region), not a teardown claim"
+    fi
+  elif [ "$GATE" = "v1.0.0" ] && { [ "$RDS" != "0" ] || [ "$CACHE" != "0" ]; }; then
     fail "v1.0.0 requires teardown. Run: python3 infra/teardown.py --confirm"
   else
     ok "cost check recorded"

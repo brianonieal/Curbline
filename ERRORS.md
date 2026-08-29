@@ -1001,6 +1001,46 @@ depends on a file, assert the file is in the repository, not merely on the disk.
 
 ---
 
+## E-032 - The teardown gate could pass on a live billing stack
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by running the gate for a version that had never been run
+
+**Symptom:** two, in opposite directions, in the same eight lines.
+
+Running `gate-check.sh v1.0.0` from a machine without AWS credentials reported
+`v1.0.0 requires teardown. Run: python3 infra/teardown.py --confirm` against an
+account that had already been torn down. The instruction is wrong and the
+obvious response, running teardown again, does nothing.
+
+The dangerous one is the inverse. The `aws rds describe-db-instances` and
+`aws elasticache describe-cache-clusters` calls carried **no `--region`**, so
+they answered for whatever region the caller defaulted to. From the wrong
+region both return zero, the gate reports "cost check recorded", and v1.0.0
+closes with a database and a cache still billing hourly.
+
+**Root cause:** the check compared `!= "0"` against a value that had three
+possible states. A failed call was assigned `"?"`, which is not `"0"`, so
+unknown collapsed into "resources exist". And the region was never pinned,
+which is E-018 reproduced inside the tool written to enforce cost control.
+
+**Fix:** `--region us-east-1` on both calls, and `?` handled as its own state.
+At v1.0.0 it fails, because "nothing billable remains" is an exit criterion and
+unverified is not verified, but it fails with the true reason: the calls did not
+answer, check credentials and region. At any other gate it warns, because being
+unable to reach AWS is not a claim about teardown either way.
+
+**Prevention:** E-018 said pin the region on every `aws` call. That was written
+into `CLAUDE.md` as a trap and then not applied to the gate script, which is the
+one place a wrong-region answer converts directly into money. **A rule recorded
+in the documentation is not applied to the code by being recorded.** When a trap
+is logged, grep for every place it can occur, including the tooling that exists
+to catch it.
+
+The second half is the E-019 and E-023 pattern again: unknown is a third state.
+Any comparison that maps a failure into one of two answers has silently chosen
+which lie to tell, and here the choice was made by operator precedence.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

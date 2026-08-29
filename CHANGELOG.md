@@ -55,6 +55,12 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-032.** The teardown gate could pass on a live billing stack. Its two
+  `aws` calls carried no `--region`, so from the wrong region both return zero
+  and v1.0.0 closes with RDS and ElastiCache still running. In the other
+  direction, a failed call was compared `!= "0"` and reported as "requires
+  teardown" against an already-empty account. Region pinned, and unknown is now
+  its own state with an honest message.
 - **E-031.** The fixture that fixes E-030 was never committed. `.gitignore`
   denies `data/*.json` with an allowlist, so a new fixture is ignored in
   silence and the capture host would have failed on a missing file. Now
