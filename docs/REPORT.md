@@ -542,7 +542,7 @@ have not yet been observed end to end on real managed services.
 Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
 nine found during the first end-to-end run against real infrastructure
 (E-009 through E-017), and six found afterwards by the boundary audit described
-in section 6.2 (E-020 through E-032). Two came from the evidence capture
+in section 6.2 (E-020 through E-033). Two came from the evidence capture
 session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
@@ -715,7 +715,7 @@ docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
-condition), `ERRORS.md` (32 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (33 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown

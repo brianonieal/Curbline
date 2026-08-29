@@ -1041,6 +1041,55 @@ which lie to tell, and here the choice was made by operator precedence.
 
 ---
 
+## E-033 - Teardown deleted the free resources first and the billing ones last
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit; the failure mode is an unbounded AWS bill
+
+**Symptom:** none observed, because the one real teardown ran cleanly. Three
+defects, all of which convert an ordinary error into money.
+
+**Root cause 1, ordering.** Deletion ran SQS, then SNS, then S3, then RDS, then
+ElastiCache. RDS and ElastiCache are the only two resources here that bill by
+the hour; everything before them is free or costs cents. `swallow()` re-raises
+any error code it was not explicitly told to expect, so a throttle, an expired
+credential or a permissions gap on a **free** queue deletion aborts the run
+before the expensive half is touched. The operator sees a traceback, and the
+two hourly resources keep running.
+
+**Root cause 2, unknown read as success.** The ElastiCache wait loop was
+`except ClientError: break`. Any error at all, including throttling and
+`AccessDenied`, ended the wait and the script proceeded as though the cluster
+were gone. This is E-032's shape in a second file.
+
+**Root cause 3, the record deleted before the verification.** `stack.json` was
+unlinked at the end with no check that anything had actually gone, under a log
+line telling the operator to go and look in the console. `stack.json` is
+gitignored and exists only on the instance that provisioned, so that produced
+the worst reachable state: resources still billing and nothing left that records
+what they are called.
+
+**Fix:** RDS and ElastiCache deletions start first, and the free deletions
+happen while they drain, so the cheap work is now inside the wait rather than in
+front of it. The cache wait treats only `CacheClusterNotFound` as gone and warns
+otherwise. Teardown verifies both are absent before unlinking `stack.json`,
+keeps the file and returns exit code 1 if either is present or unverifiable, and
+says the script is idempotent so re-running is the correct response.
+
+A missing `stack.json` no longer exits with "Nothing recorded to tear down",
+which reads as "nothing exists". It now prints the region-pinned commands to
+find `curbline-*` resources by hand and says to delete RDS and ElastiCache
+first.
+
+**Prevention:** **order destructive work by what it costs to leave behind, not
+by dependency convenience.** Everything in a teardown is worth doing; only some
+of it is worth doing before the next hour ticks over.
+
+The recurring one, now in a fourth place: unknown is not a synonym for the
+outcome you were hoping for. E-019 rendered it as zero, E-023 as healthy, E-032
+as torn down, and here as a deleted cluster. Every one was a comparison that
+mapped a failure onto the convenient answer.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

@@ -55,6 +55,12 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-033.** Teardown deleted the free resources first and the hourly-billing
+  ones last, so an error on a queue deletion aborted the run with RDS and
+  ElastiCache still running. It also treated any ElastiCache error as "gone",
+  and unlinked `stack.json` before verifying anything, which is the worst
+  state: live resources and no record of their names. Billable deletions now go
+  first, verification gates the unlink, and the exit code carries the answer.
 - **E-032.** The teardown gate could pass on a live billing stack. Its two
   `aws` calls carried no `--region`, so from the wrong region both return zero
   and v1.0.0 closes with RDS and ElastiCache still running. In the other
