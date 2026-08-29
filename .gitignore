@@ -15,6 +15,10 @@ infra/stack.json
 data/*.json
 !data/replay.example.json
 !data/replay.escalation.json
+# 162 KB, well under the size at which a fixture stops belonging in git. Built
+# from recorded FloodNet readings by data/convert_floodnet.py. The 4.7 MB raw
+# NYC Open Data download it derives from is deliberately NOT committed.
+!data/replay.floodnet.json
 
 .venv/
 __pycache__/

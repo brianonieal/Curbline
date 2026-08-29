@@ -284,3 +284,52 @@ memory. Both are bounded by the fact that these are integers on a dashboard.
 **Flips if:** the counters ever need to survive a cache restart, or a second
 metric appears that is not about the cache. Either makes a stats table the right
 home, and at that point move all of them rather than splitting the transport.
+
+---
+
+## D-015 — Replay recorded FloodNet readings instead of hand-written values
+
+**Date:** 2026-08-29 | **Gate:** v0.7.0
+
+**Decision:** the demo replays `data/replay.floodnet.json`, built by
+`data/convert_floodnet.py` from two NYC Open Data downloads: *FloodNet: Street
+Flooding Events Measured by FloodNet Sensors* and *FloodNet: Sensor Deployment
+Metadata*. The event is **2025-10-30**, the largest multi-sensor day in the
+download, 17:23 to 01:44 GMT. Real sensor ids, real coordinates, real recorded
+depths. `replay.example.json` and `replay.escalation.json` stay as they are.
+
+**Why this was possible at all, which was not obvious.** The events dataset is
+one row per flood per sensor and looks like a summary table. It carries the
+underlying series inline in `Time Series Depth Values (inches)` and
+`Time Series Depth Timestamps (seconds)`: 353,771 real samples at a median
+63-second cadence. Nothing is interpolated between summary endpoints. Had that
+column not existed there would have been no readings to replay and the honest
+answer would have been to keep the synthetic fixtures.
+
+**Why no baseline correction, which is the opposite of USGS.** These values are
+already flood depth above ground, not range to the water surface. Verified
+rather than assumed: 478 of the first 500 events start at exactly 0.00 and
+there is not one negative sample in the file. So the conversion is inches times
+2.54 and nothing else. E-001 cost an afternoon discovering that USGS gage height
+needs a per-site baseline; the check that would have caught it early is the one
+run here first.
+
+**What it buys.** At peak the fixture forms six simultaneous zones across four
+boroughs, all on real streets. One zone with **stable membership** (Ditmars St
+and Tier St, Throgs Neck) climbs monitor to advisory to warning and then
+recedes, which is the exact behaviour `replay.escalation.json` had to be
+hand-built to fake because of D-003. The network fully drains by frame 34, so
+the E-020 recession sweep has something real to close.
+
+**Cost accepted, and it must be disclosed:** the original clock is not
+preserved. Frames are subsampled at a fixed interval and `ReplaySource` stamps
+`observed_at` with `now()`, so the replay reproduces the shape and spacing of
+the event, compressed, not the event as it occurred. The 4.7 MB raw download is
+not committed; the 162 KB derived fixture is, and the converter regenerates it.
+The fixture also contains only sensors that flooded, because the dataset records
+flood events and not quiet periods, so there are no genuinely dry sensors on the
+map.
+
+**Flips if:** FloodNet publishes a continuous raw-reading feed including
+non-event periods, or `CURBLINE_SOURCE=floodnet` runs live against a real storm.
+Either makes a recorded replay the second-best evidence available.

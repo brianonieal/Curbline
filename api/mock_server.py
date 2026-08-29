@@ -74,6 +74,58 @@ SENSORS = [
 QUEENS = {"mock:q1", "mock:q2", "mock:q3", "mock:q4"}
 REDHOOK = {"mock:b1", "mock:b2"}
 
+# Opt-in replay mode. Point CURBLINE_MOCK_REPLAY at a replay fixture and the
+# mock serves that instead of the synthetic storm, clustering by real distance
+# rather than the two hardcoded groups above. This exists because the fixture
+# built from recorded FloodNet readings cannot otherwise be seen in a browser
+# without a provisioned stack, and "the frontend was never rendered" is a
+# coverage gap TESTS.md already admits to.
+REPLAY_PATH = os.environ.get("CURBLINE_MOCK_REPLAY")
+_replay_frames: list[list[dict]] = []
+_replay_index = 0
+if REPLAY_PATH:
+    _replay_frames = json.loads(pathlib.Path(REPLAY_PATH).read_text())
+    print(f"mock: replaying {len(_replay_frames)} frames from {REPLAY_PATH}")
+
+
+def _cluster_wet(wet: dict) -> list[list[tuple]]:
+    """DBSCAN-equivalent for minpoints=2: components of the 1640 ft graph."""
+    eps_m = 1640 * 0.3048
+    ids = list(wet)
+
+    def metres(a, b):
+        r = 6371000.0
+        p1, p2 = math.radians(a[3]), math.radians(b[3])
+        dp = p2 - p1
+        dl = math.radians(b[2] - a[2])
+        h = (math.sin(dp / 2) ** 2
+             + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2)
+        return 2 * r * math.asin(math.sqrt(h))
+
+    adj: dict[str, set] = {i: set() for i in ids}
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            if metres(wet[ids[i]], wet[ids[j]]) <= eps_m:
+                adj[ids[i]].add(ids[j])
+                adj[ids[j]].add(ids[i])
+
+    seen: set = set()
+    out = []
+    for sid in ids:
+        if sid in seen or not adj[sid]:
+            continue
+        comp, stack = set(), [sid]
+        while stack:
+            n = stack.pop()
+            if n in comp:
+                continue
+            comp.add(n)
+            stack += [m for m in adj[n] if m not in comp]
+        seen |= comp
+        if len(comp) >= 2:
+            out.append([wet[s] for s in sorted(comp)])
+    return out
+
 _advisories: list[dict] = []
 _zone_states: dict[str, str] = {}
 
@@ -85,6 +137,12 @@ def storm_intensity() -> float:
 
 
 def readings() -> list[tuple]:
+    global _replay_index
+    if _replay_frames:
+        frame = _replay_frames[_replay_index % len(_replay_frames)]
+        _replay_index += 1
+        return [(r["sensor_id"], r["name"], r["lon"], r["lat"], r["depth_cm"])
+                for r in frame]
     peak = storm_intensity()
     out = []
     for sid, name, lon, lat, gain in SENSORS:
@@ -130,8 +188,14 @@ def build_state() -> dict:
     wet = {r[0]: r for r in rows if r[4] >= THRESHOLDS["detect_cm"]}
 
     zone_features, advisory_rows = [], []
-    for label, members in (("queens", QUEENS), ("redhook", REDHOOK)):
-        present = [wet[s] for s in members if s in wet]
+    if _replay_frames:
+        groups = [(",".join(sorted(r[0] for r in g)), g)
+                  for g in _cluster_wet(wet)]
+    else:
+        groups = [(lbl, [wet[s] for s in mem if s in wet])
+                  for lbl, mem in (("queens", QUEENS), ("redhook", REDHOOK))]
+
+    for label, present in groups:
         if len(present) < 2:
             _zone_states.pop(label, None)
             continue
