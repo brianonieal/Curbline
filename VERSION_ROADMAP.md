@@ -36,12 +36,14 @@ efficient shape is one window that satisfies all four and ends in teardown.
 
 1. Provision. Confirm the SNS subscription **immediately**, before the pipeline
    publishes anything. This is the item that has slipped past two gates.
-2. Prove connectivity (PostGIS version, Redis ping) before touching anything
-   else. If it fails, use the five-rung ladder below, not the old abort.
+2. Run `scripts/preflight.py`. It executes every query the workers run, with
+   the same argument types, and fails on an unconfirmed SNS subscription. If
+   connectivity fails, use the five-rung ladder below, not the old abort.
 3. Cache degradation test first, not last. Capture the amber pair, restore,
    confirm green.
-4. Let the replay storm run until a zone shows a second advisory. That is the
-   evidence for E-021 and it does not exist until escalation happens.
+4. Point `CURBLINE_REPLAY_FILE` at `data/replay.escalation.json` and let it run
+   until one zone shows a rising ladder. The default fixture cannot produce one
+   (E-030).
 5. `./scripts/capture-evidence.sh`, then read `docs/evidence/cli/MANIFEST.md`.
 6. Screenshots, to the filenames already fixed in `DEMO.md` and Appendix C.
 7. Commit evidence **while the stack is still up**.
@@ -49,10 +51,12 @@ efficient shape is one window that satisfies all four and ends in teardown.
 
 ### What is different since the last live run, and why that is a risk
 
-Nine defects were fixed on 2026-08-28 after the v0.5.0 capture: E-020 through
-E-028. Two were severe. **None of that code has ever executed against real
-managed services.** 81 unit tests pass and moto is not PostGIS, which is the
-exact blind spot that produced E-013 and E-017 in the first place.
+Eleven defects were fixed on 2026-08-28 after the v0.5.0 capture: E-020 through
+E-030. Two were severe. **None of that code has ever executed against real
+managed services.** 91 unit tests and 18 console checks pass, and moto is not
+PostGIS, which is the exact blind spot that produced E-013 and E-017 in the
+first place. `scripts/preflight.py` exists to close as much of that gap as can
+be closed in thirty seconds.
 
 The specific things to watch, in the order they would surface:
 
@@ -76,7 +80,11 @@ They are the only proof that the two severe fixes work in production rather
 than only in unit tests. Check both by eye before teardown:
 
 - `advisories-per-zone.txt` shows a zone with **more than one** advisory and a
-  rising ladder. One row per zone means E-021 is still suppressing escalation.
+  rising ladder. One row per zone means E-021 is still suppressing escalation,
+  **or** the run used `replay.example.json`, which cannot produce a ladder at
+  all because membership changes at every depth tier and each tier becomes a
+  separate zone. Point `CURBLINE_REPLAY_FILE` at `replay.escalation.json`.
+  See E-030.
 - `zone-states.txt` shows a zone that is not `forming` or `active`. All zones
   open forever means the E-020 sweep is not running.
 

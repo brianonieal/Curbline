@@ -55,6 +55,13 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-030.** `data/replay.example.json` cannot demonstrate that E-021 is fixed.
+  Zone identity hashes the member sensor set, the wet set grows as the storm
+  deepens, so every depth tier is a new zone and a correct system yields one
+  advisory per zone: indistinguishable from the defect. The capture guidance had
+  already been written to check for a ladder that fixture cannot produce.
+  `data/replay.escalation.json` holds membership constant and climbs through
+  every tier.
 - **E-029.** An NWS alert with no `expires` field was stored and then never
   correlated, drawn or counted, because three queries filtered on
   `expires > now()`, which is NULL rather than true for a NULL column. The
@@ -86,7 +93,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 56 tests. 31 to 87. `should_notify`, `sweep_state` and `health_status`
+- 60 tests. 31 to 91. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

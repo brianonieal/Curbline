@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-87 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+91 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -459,6 +459,7 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestHealthVerdict` | 5 | E-023: a stopped component degrades the system verdict; unknown liveness does not |
 | `TestRecessionIsDrivenByAbsence` | 7 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
 | `TestAdvisorySuppression` | 6 | E-021: escalation notifies even when state is unchanged; a NULL last level does not silence the first advisory |
+| `TestEscalationFixture` | 4 | E-030: the demo fixture must hold membership constant and cross every tier, or the advisory ladder cannot be observed |
 | `TestAlertIngestGuards` | 6 | E-029: an alert with no id fails at the producer, and a NULL expiry is published rather than invented |
 | `TestReadingTimestamps` | 8 | E-028: an offset is required and normalised to UTC on the type itself, and one bad gauge skips its reading rather than the poll |
 | `TestAuditProvenance` | 3 | E-027: the record names the parameters that produced the cluster, and a substituted value says it was substituted |
@@ -541,7 +542,7 @@ have not yet been observed end to end on real managed services.
 Full screenshot set in Appendix C. Twenty-five defects are logged in `ERRORS.md`:
 nine found during the first end-to-end run against real infrastructure
 (E-009 through E-017), and six found afterwards by the boundary audit described
-in section 6.2 (E-020 through E-029). Two came from the evidence capture
+in section 6.2 (E-020 through E-030). Two came from the evidence capture
 session itself: E-018,
 an empty regional API result misread as proof of deletion (fixed: pin
 `--region us-east-1` on every call), and E-019, a cache hit rate that read zero
@@ -589,7 +590,16 @@ Twelve, stated plainly.
    window, so no genuine reading would cross a detection threshold. The pipeline
    was therefore exercised with synthetic readings from
    `data/replay.example.json`, a four-frame progression written for interface
-   testing, replayed through the live production stack.
+   testing, and `data/replay.escalation.json`, a six-frame progression written
+   afterwards for a reason worth stating: the first fixture **cannot**
+   demonstrate that a zone escalates. Zone identity is a hash of the member
+   sensor set (D-003), and in that fixture the wet set grows as the storm
+   deepens, so each depth tier produces a different zone_id and every tier is a
+   brand new zone. A fully working system yields exactly one advisory per zone
+   from it. The second fixture holds membership constant and raises depth
+   through the tiers instead, which is the only way this system's advisory
+   ladder can be observed at all. Both are replayed through the live production
+   stack. See E-030.
 
    That needs stating precisely, because "replay data" covers three different
    situations and they are not equivalent. This was **not** a recording of a
@@ -698,14 +708,14 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           87 unit tests plus fixture_clusters.sql
+tests/           91 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
 ```
 
 Governance files at the root: `DECISIONS.md` (14 decisions, each with a flip
-condition), `ERRORS.md` (29 logged defects), `TESTS.md`, `CHANGELOG.md`,
+condition), `ERRORS.md` (30 logged defects), `TESTS.md`, `CHANGELOG.md`,
 `VERSION_ROADMAP.md`, `TIMELOG.md`, `COSTS.md`, `RETENTION.md`.
 
 ## Appendix B: Provisioning and teardown
@@ -739,8 +749,10 @@ teardown consumes a month's allowance.
 ## Appendix C: Full screenshot set
 
 Every screenshot states which data source produced it. Captures marked
-**replay** used `data/replay.example.json`, a four-frame recorded storm
-progression, and are disclosed as replays here and in `curbline/sources.py`.
+**replay** used a synthetic progression from `data/`, and are disclosed as
+replays here and in `curbline/sources.py`. Captures showing the advisory ladder
+used `replay.escalation.json`; earlier captures used `replay.example.json`.
+Limitation 9 explains why two fixtures exist.
 Captures marked **usgs** are live gage data.
 
 

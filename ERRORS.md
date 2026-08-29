@@ -901,6 +901,59 @@ Inventing is always the option that produces confident wrong answers later.
 
 ---
 
+## E-030 - The demo fixture cannot demonstrate the fix it was meant to prove
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** would have produced a false negative during the capture session
+
+**Symptom:** none yet, and that is the point. The capture guidance in `DEMO.md`
+and `VERSION_ROADMAP.md` had already been written to say "verify a zone shows
+more than one advisory and a rising ladder, or E-021 is still suppressing
+escalation." Run against `data/replay.example.json`, a fully correct system
+produces exactly one advisory per zone, which is indistinguishable from the
+defect. The check would have failed on working code and sent someone debugging
+a fix that was fine.
+
+**Root cause:** zone identity is a hash of the member sensor set (D-003). In
+`replay.example.json` the wet set grows as the storm deepens: three sensors
+above threshold in frame 1, five in frames 2 and 3. Each distinct member set
+hashes to a different `zone_id`, so each depth tier is a **new** zone that
+begins at `forming` and issues at most one advisory before the fixture ends.
+The advisory ladder is a property of one zone over time, and no zone in that
+fixture exists at more than one level.
+
+Simulated rather than reasoned about: replaying the fixture through
+`stable_zone_id` and `decide_level` yields two zone ids, one seen once at
+`monitor` and one seen twice at `warning`. Never a rising ladder.
+
+**Fix:** `data/replay.escalation.json`, six frames, membership held constant at
+four Queens sensors while depth climbs 6.9 to 26.1 cm and then eases back. That
+produces one `zone_id` with four advisories, `monitor` then `advisory` then
+`warning` then `monitor`, and one correctly suppressed frame where the level was
+unchanged. It exercises both halves of E-021 in a single run.
+
+`replay.example.json` is left untouched. The six committed audit records came
+from it and rewriting it would invalidate their provenance. `DEMO.md` now points
+`CURBLINE_REPLAY_FILE` at the escalation fixture for the capture, and says to
+check which fixture is loaded before concluding the fix is broken.
+
+`TestEscalationFixture` asserts the properties the evidence depends on:
+membership never varies, the set is large enough to cluster, depth crosses all
+three tiers, and replaying the dispatcher's own decisions over it produces a
+rising ladder plus at least one suppression. Verified to fail by making one
+sensor drop out of one frame.
+
+**Prevention:** this is E-020 wearing different clothes. There, a test asserted
+a transition on an input the pipeline could not produce. Here, an evidence
+procedure asserted an outcome the fixture could not produce. Both pass review
+because the assertion is about the right thing; both are useless because the
+input never occurs.
+
+**Before writing down "verify X", check that the setup can produce X at all.**
+An evidence plan is a test, and a test whose expected outcome is unreachable
+fails against correct code, which is worse than not checking, because it costs
+the debugging time of a bug that does not exist.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

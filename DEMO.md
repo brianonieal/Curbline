@@ -38,12 +38,21 @@ python3 scripts/preflight.py
 # 4. Cache degradation test, FIRST, not last. Full procedure below under
 #    "Run this FIRST". Capture the amber pair, restore, confirm green.
 
-# 5. Let the pipeline run long enough to escalate. The replay storm has to
-#    climb through monitor -> advisory -> warning for the E-021 evidence to
-#    exist at all. Watch until a second advisory appears for one zone:
-watch -n10 'PGPASSWORD=$CURBLINE_DB_PASSWORD psql -tA -h $CURBLINE_DB_HOST \
-  -U $CURBLINE_DB_USER -d $CURBLINE_DB_NAME \
-  -c "SELECT zone_id, count(*) FROM advisories GROUP BY zone_id"'
+# 5. Use the escalation fixture, not the default one. replay.example.json
+#    grows its wet set as the storm deepens, and zone identity is a hash of
+#    membership (D-003), so every depth tier becomes a NEW zone and no zone
+#    ever escalates. A correct system produces one advisory per zone from it,
+#    which looks exactly like the E-021 defect. See E-030.
+REPLAY=/home/ubuntu/curbline/data/replay.escalation.json
+sudo systemctl set-environment CURBLINE_REPLAY_FILE=$REPLAY
+sudo systemctl restart 'curbline-*'
+
+#    Then watch until one zone shows three advisories and a rising ladder.
+#    The fixture reaches warning in six frames, so this is minutes, not hours.
+watch -n10 "PGPASSWORD=\$CURBLINE_DB_PASSWORD psql -tA \
+  -h \$CURBLINE_DB_HOST -U \$CURBLINE_DB_USER -d \$CURBLINE_DB_NAME \
+  -c \"SELECT zone_id, count(*), string_agg(level, ' then ' ORDER BY issued_at) \
+      FROM advisories GROUP BY zone_id\""
 
 # 6. One command for every textual artifact.
 ./scripts/capture-evidence.sh
@@ -76,7 +85,10 @@ proof that this session's two severe fixes work in production rather than only
 in unit tests:
 
 - `advisories-per-zone.txt` shows a zone with **more than one** advisory and a
-  rising ladder. One row per zone means E-021 is still suppressing escalation.
+  rising ladder, `monitor -> advisory -> warning`. One row per zone means either
+  E-021 is still suppressing escalation, or you are running the wrong fixture:
+  `replay.example.json` cannot produce a ladder at all. Check which file
+  `CURBLINE_REPLAY_FILE` points at before concluding the fix is broken.
 - `zone-states.txt` shows a zone that is not `forming` or `active`. All zones
   open forever means E-020's sweep thread is not running.
 

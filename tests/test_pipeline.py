@@ -565,6 +565,79 @@ class TestUSGSBaselinePersistence:
             assert src.resolve_baseline("01300000") == 3.0
 
 
+class TestEscalationFixture:
+    """
+    E-030. `data/replay.example.json` cannot demonstrate that E-021 is fixed,
+    and the capture guidance had already been written as though it could.
+
+    Zone identity is a hash of the member sensor set (D-003). In that fixture
+    the wet set grows as the storm deepens, so each depth tier produces a
+    different zone_id, every tier is a brand new zone, and no zone ever
+    escalates. A correct system produces exactly one advisory per zone from it,
+    which is indistinguishable from the E-021 defect it was meant to disprove.
+
+    `data/replay.escalation.json` holds membership constant and raises depth
+    through the tiers instead. These assert the properties the evidence depends
+    on, so the fixture cannot be edited into uselessness later.
+    """
+
+    def _frames(self):
+        import json, pathlib
+        return json.loads(
+            pathlib.Path("data/replay.escalation.json").read_text())
+
+    def _wet(self, frame, detect=5.0):
+        return sorted(r["sensor_id"] for r in frame
+                      if r["depth_cm"] >= detect)
+
+    def test_membership_never_changes(self):
+        """The whole point. A changed member set is a different zone_id."""
+        sets = {tuple(self._wet(f)) for f in self._frames()}
+        assert len(sets) == 1, (
+            f"membership varies across frames ({sets}); every variant becomes "
+            "a separate zone and the ladder cannot form"
+        )
+
+    def test_at_least_two_sensors_so_a_cluster_forms(self):
+        from curbline import config
+        assert len(self._wet(self._frames()[0])) >= config.CLUSTER_MIN_SENSORS
+
+    def test_depth_crosses_every_advisory_tier(self):
+        from workers.dispatcher import decide_level
+        levels = [decide_level(max(r["depth_cm"] for r in f), len(f), False)
+                  for f in self._frames()]
+        assert {"monitor", "advisory", "warning"} <= set(levels), (
+            f"fixture never reaches all three levels: {levels}"
+        )
+
+    def test_it_produces_a_rising_ladder_and_one_suppression(self):
+        """
+        Replays the dispatcher's own decisions over the fixture. Asserts both
+        halves of E-021: a level change notifies, and an unchanged level does
+        not.
+        """
+        from workers.dispatcher import decide_level, next_state, should_notify
+        prev_state, prev_level, issued, suppressed = None, None, [], 0
+        for f in self._frames():
+            mx = max(r["depth_cm"] for r in f)
+            state = next_state(prev_state)
+            level = decide_level(mx, len(self._wet(f)), False)
+            previous = (None if prev_state is None
+                        else {"state": prev_state, "last_level": prev_level,
+                              "under_alert": False})
+            if should_notify(previous, state, level, False):
+                issued.append(level)
+                prev_level = level
+            elif state != "forming":
+                suppressed += 1
+            prev_state = state
+
+        assert issued[:3] == ["monitor", "advisory", "warning"], (
+            f"expected a rising ladder, got {issued}"
+        )
+        assert suppressed >= 1, "fixture must also exercise the suppression path"
+
+
 class TestAlertIngestGuards:
     """
     E-029. Two ways an NWS alert became useless without saying so.
