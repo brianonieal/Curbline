@@ -116,6 +116,23 @@ if git diff --cached --name-only 2>/dev/null | grep -qE '^\.env$|stack\.json$'; 
 fi
 [ "$SECRET_LEAK" -eq 0 ] && ok "no secret files tracked or staged"
 
+# The inverse of a secret leak, and it bit once. .gitignore denies data/*.json
+# by default with an allowlist, which is the right direction for licensed data
+# and means a NEW fixture is ignored in silence: git add says nothing, the
+# commit succeeds, and the file exists on one laptop. replay.escalation.json
+# was written, tested against and referenced by the run book while absent from
+# every clone. See E-031. Warn rather than block, because a genuinely cached
+# FloodNet extract sitting here is expected and must NOT be committed.
+# Bytecode is excluded: a warning that always fires teaches people to skip it.
+HIDDEN_DATA=$(git ls-files --others --ignored --exclude-standard data/ 2>/dev/null \
+              | grep -vE '__pycache__|\.pyc$' || true)
+if [ -n "$HIDDEN_DATA" ]; then
+  warn "ignored file(s) under data/. If any is a fixture the code needs, it will not exist on the capture host:"
+  printf '%s\n' "$HIDDEN_DATA" | sed 's/^/           /'
+else
+  ok "no ignored fixtures hiding under data/"
+fi
+
 # Scan what git tracks, not what happens to sit in the working directory. A
 # .venv under the repo trips every pattern below: botocore assigns
 # aws_secret_access_key, and moto ships import docker plus AWS::Lambda model

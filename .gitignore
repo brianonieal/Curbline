@@ -4,8 +4,17 @@ infra/stack.json
 
 # FloodNet data is under a noncommercial license. Do not redistribute it via a
 # public repo: cache it locally, ingest it, never commit it.
+#
+# The allowlist below is the safe direction (deny by default) and it has a cost
+# worth knowing: a NEW fixture is silently ignored, `git add` reports nothing,
+# and the file exists on your disk and nowhere else. That happened to
+# replay.escalation.json, which was written, tested against, referenced by the
+# run book, and never committed. See E-031. Add an exception here whenever you
+# add a fixture, and TestEscalationFixture asserts the tracking so the mistake
+# cannot survive a test run.
 data/*.json
 !data/replay.example.json
+!data/replay.escalation.json
 
 .venv/
 __pycache__/

@@ -954,6 +954,53 @@ the debugging time of a bug that does not exist.
 
 ---
 
+## E-031 - The fixture that fixes E-030 was never in the repository
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** would have stopped the capture session dead at step 6
+
+**Symptom:** `data/replay.escalation.json` existed on one laptop and in no
+clone. `git add -A` reported nothing, the commit succeeded, the test suite
+passed, the run book referenced the file by path, and `git ls-files data/`
+listed only the old fixture.
+
+**Root cause:** `.gitignore` denies `data/*.json` and allowlists the one fixture
+that existed when the rule was written. That is the correct direction, because
+FloodNet data is under a noncommercial licence and must never reach a public
+repo. The cost of deny-by-default is that a **new** fixture is ignored in
+silence: `git add` does not warn about an ignored path, so nothing anywhere
+reports the omission.
+
+The failure mode is the one this project keeps producing: correct on the machine
+that made it, absent everywhere else, and invisible to every check. The EC2 host
+would have cloned the repo, and step 6 of the capture session, which sets
+`CURBLINE_REPLAY_FILE` to that path, would have failed on a missing file. The
+four tests asserting the fixture's properties would also have failed on a fresh
+clone, which means gate-check would have failed on the capture host while
+passing here.
+
+**Fix:** an explicit `!data/replay.escalation.json` exception, the file
+committed with `git add -f`, and two checks so it cannot recur silently:
+
+- `TestEscalationFixture.test_the_fixture_is_actually_tracked_by_git` shells out
+  to `git ls-files --error-unmatch`. Reading a file from disk proves it exists
+  on this machine and says nothing about the repository. Verified to fail before
+  the file was added.
+- `gate-check.sh` warns about any ignored file under `data/`, excluding
+  bytecode. It warns rather than blocks because a genuinely cached FloodNet
+  extract sitting there is expected and must not be committed. Bytecode is
+  filtered out deliberately: a warning that always fires teaches people to skip
+  warnings.
+
+**Prevention:** deny-by-default on a data directory is right, and its cost is
+that adding a legitimate file requires a second action nobody is reminded to
+take. Any allowlist needs something that notices when a new file falls outside
+it.
+
+The wider rule, which E-019, E-026 and this all share: **a test that reads local
+state proves something about this machine, not about the artifact.** If the code
+depends on a file, assert the file is in the repository, not merely on the disk.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

@@ -55,6 +55,11 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-031.** The fixture that fixes E-030 was never committed. `.gitignore`
+  denies `data/*.json` with an allowlist, so a new fixture is ignored in
+  silence and the capture host would have failed on a missing file. Now
+  excepted, committed, and asserted by a test that checks git tracking rather
+  than disk presence.
 - **E-030.** `data/replay.example.json` cannot demonstrate that E-021 is fixed.
   Zone identity hashes the member sensor set, the wet set grows as the storm
   deepens, so every depth tier is a new zone and a correct system yields one
@@ -93,7 +98,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 60 tests. 31 to 91. `should_notify`, `sweep_state` and `health_status`
+- 61 tests. 31 to 92. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

@@ -274,7 +274,7 @@ ElastiCache bill by the hour whether or not anything is using them.
 CLAUDE.md               Project instructions for Claude Code (read first)
 VERSION_ROADMAP.md      Gated roadmap, v0.5.0 through v2.0.0
 DECISIONS.md            14 decisions, each with a flip condition
-ERRORS.md               30 logged defects, mostly fixed. Do not rediscover.
+ERRORS.md               31 logged defects, mostly fixed. Do not rediscover.
 TESTS.md                Test registry and stated coverage gaps
 RETENTION.md            Cold-defense drill log and flip watch
 CHANGELOG.md            Version history
@@ -298,7 +298,7 @@ api/mock_server.py      Runs the console with no AWS, for frontend work
 web/                    Console: index.html, style.css, app.js
 data/capture_replay.py  Records a live storm for demo replay
 systemd/                Service units
-tests/                  Clustering fixture and 91 unit tests
+tests/                  Clustering fixture and 92 unit tests
 docs/REPORT.md          The report, mapped to the rubric
 docs/evidence/          CLI captures and S3 audit records from the live run
 DEMO.md                 Run book and evidence checklist

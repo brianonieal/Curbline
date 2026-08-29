@@ -1,0 +1,224 @@
+[
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 6.2
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 5.8
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 6.9
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 5.1
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.4
+    }
+  ],
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 7.4
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 6.6
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 8.1
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 6.0
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.4
+    }
+  ],
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 11.2
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 9.8
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 13.4
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 9.1
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.5
+    }
+  ],
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 19.6
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 17.2
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 24.3
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 16.8
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.5
+    }
+  ],
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 21.0
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 18.9
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 26.1
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 18.0
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.6
+    }
+  ],
+  [
+    {
+      "sensor_id": "demo:q1",
+      "name": "Jamaica Ave & 150th",
+      "lon": -73.7975,
+      "lat": 40.702,
+      "depth_cm": 8.0
+    },
+    {
+      "sensor_id": "demo:q2",
+      "name": "Jamaica Ave & 153rd",
+      "lon": -73.794,
+      "lat": 40.7025,
+      "depth_cm": 7.2
+    },
+    {
+      "sensor_id": "demo:q3",
+      "name": "Hillside Ave & 150th",
+      "lon": -73.7968,
+      "lat": 40.7062,
+      "depth_cm": 9.4
+    },
+    {
+      "sensor_id": "demo:q4",
+      "name": "90th Ave & 150th",
+      "lon": -73.7981,
+      "lat": 40.6995,
+      "depth_cm": 6.8
+    },
+    {
+      "sensor_id": "demo:b1",
+      "name": "Van Brunt & Beard",
+      "lon": -74.0165,
+      "lat": 40.6748,
+      "depth_cm": 0.4
+    }
+  ]
+]

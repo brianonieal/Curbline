@@ -4,7 +4,7 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 91 Python passing, 0 failing. Plus 18 console checks in
+**Current: 92 Python passing, 0 failing. Plus 18 console checks in
 `tests/console_smoke.js`, run by `gate-check.sh`.**
 
 The console had no automated coverage at all until 2026-08-28, and seven of the
@@ -43,7 +43,7 @@ documents for `scripts/gate-check.sh`.
 | `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and that an unrecognised source falls back to the sensitive calibration |
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone_id from the database still matches the string in the queue body, so a forming zone promotes |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries the insert once |
-| `TestEscalationFixture` | 4 | E-030: replay.example.json cannot produce an advisory ladder because membership changes per tier; these assert replay.escalation.json can |
+| `TestEscalationFixture` | 5 | E-030: replay.example.json cannot produce an advisory ladder because membership changes per tier; these assert replay.escalation.json can |
 | `TestAlertIngestGuards` | 6 | E-029: an alert with no id is skipped at the collector instead of dead-lettering, and a missing expiry is published as NULL rather than fabricated |
 | `TestReadingTimestamps` | 8 | E-028: observed_at must carry a UTC offset, enforced on the Reading dataclass so no source can bypass it; a bad gauge skips its reading, not the poll |
 | `TestAuditProvenance` | 3 | E-027: the audit record names the parameters the correlator actually clustered with, and discloses a fallback rather than substituting silently |

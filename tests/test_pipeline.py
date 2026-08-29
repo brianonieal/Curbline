@@ -590,6 +590,29 @@ class TestEscalationFixture:
         return sorted(r["sensor_id"] for r in frame
                       if r["depth_cm"] >= detect)
 
+    def test_the_fixture_is_actually_tracked_by_git(self):
+        """
+        E-031. Every other test here reads the file from disk, which passes on
+        the machine that wrote it and says nothing about whether it exists in
+        the repository. `.gitignore` denies `data/*.json` by default, so a new
+        fixture is ignored silently: `git add` reports nothing, `git commit`
+        succeeds, and the file lives on one laptop.
+
+        That is what happened. The fixture was written, tested against, and
+        referenced by the run book while being absent from every clone,
+        including the EC2 host that was going to run the capture.
+        """
+        import subprocess
+        r = subprocess.run(
+            ["git", "ls-files", "--error-unmatch",
+             "data/replay.escalation.json"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, (
+            "data/replay.escalation.json is not tracked by git. It is ignored "
+            "by the data/*.json rule and needs an explicit ! exception in "
+            ".gitignore, or it will not exist on the host that runs the capture."
+        )
+
     def test_membership_never_changes(self):
         """The whole point. A changed member set is a different zone_id."""
         sets = {tuple(self._wet(f)) for f in self._frames()}
