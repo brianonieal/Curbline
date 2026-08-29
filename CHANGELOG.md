@@ -55,6 +55,12 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-028.** `observed_at` was inserted into a `TIMESTAMPTZ` column unparsed.
+  A naive timestamp is read in the database server's timezone, and a shift
+  larger than the reading window empties every cluster query silently. Latent
+  only because both current sources happen to emit offsets. An offset is now
+  required and normalised to UTC, enforced on the `Reading` dataclass so no
+  source can bypass it.
 - **E-027.** The S3 audit record named the four detection parameters by
   reading the dispatcher's own config, while clustering ran in the correlator
   with its copy. The correlator now carries them in the message and the record
@@ -72,7 +78,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 37 tests. 31 to 68. `should_notify`, `sweep_state` and `health_status`
+- 45 tests. 31 to 76. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

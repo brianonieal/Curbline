@@ -23,6 +23,37 @@ from . import cache, config
 log = logging.getLogger(__name__)
 
 
+def normalise_observed_at(raw: str) -> str:
+    """
+    An ISO-8601 string guaranteed to carry a UTC offset, or a ValueError.
+
+    `observed_at` lands in a TIMESTAMPTZ column, and PostgreSQL parses it at
+    execution. An offset-aware string is unambiguous. A naive one is read in the
+    database server's timezone, and a shift larger than READING_WINDOW_MINS
+    pushes every reading outside the window filter in `current_clusters()`.
+    Readings then accumulate, the sensor map paints normally, and clustering
+    returns nothing forever with no error anywhere.
+
+    Naive input raises rather than defaulting to UTC. The zone is genuinely
+    unknown, and quietly assuming one is how a four hour shift becomes
+    invisible. Both current sources emit offsets, so this validates an existing
+    property instead of changing behaviour. See E-028.
+    """
+    text = raw.strip()
+    # fromisoformat handles "Z" only from 3.11. Normalise it for older readers
+    # of this code as much as for the parser.
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)  # ValueError if unparseable
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        raise ValueError(
+            f"observed_at {raw!r} has no UTC offset. Its timezone would be "
+            f"guessed by PostgreSQL, and a shift larger than the reading "
+            f"window silently empties every cluster query."
+        )
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 @dataclass
 class Reading:
     ingest_id: str
@@ -33,6 +64,13 @@ class Reading:
     observed_at: str
     depth_cm: float
     source: str
+
+    def __post_init__(self) -> None:
+        # Enforced on the type rather than at each call site, so a source added
+        # later cannot reintroduce the naive-timestamp path by forgetting to
+        # call the helper. E-014, E-022 and E-025 were one defect fixed in three
+        # layers because the rule lived in the layers instead of the data.
+        self.observed_at = normalise_observed_at(self.observed_at)
 
     def to_message(self) -> dict[str, Any]:
         return {"kind": "reading", **asdict(self)}
@@ -223,6 +261,15 @@ class USGSSource:
             site = str(props.get("monitoring_location_id")
                        or feature.get("id") or "unknown")
 
+            try:
+                observed_at = normalise_observed_at(
+                    str(props.get("time")
+                        or datetime.now(timezone.utc).isoformat()))
+            except ValueError as exc:
+                # One malformed gauge must not stop the poll for the others.
+                log.warning("bad timestamp from %s, skipping: %s", site, exc)
+                continue
+
             baseline_ft = self.resolve_baseline(site)
             if baseline_ft is None:
                 # Withheld, not published as zero. Without a datum there is no
@@ -238,8 +285,7 @@ class USGSSource:
                 name=str(props.get("monitoring_location_name") or site),
                 lon=float(coords[0]),
                 lat=float(coords[1]),
-                observed_at=str(props.get("time")
-                                or datetime.now(timezone.utc).isoformat()),
+                observed_at=observed_at,
                 depth_cm=round(rise_cm, 2),
                 source=self.name,
             )

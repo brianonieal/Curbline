@@ -802,6 +802,51 @@ and provenance that is only conditionally true is not provenance.
 
 ---
 
+## E-028 - A naive reading timestamp would empty every cluster query, silently
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 (latent, never fired) | **Cost:** found by audit, twice, independently
+
+**Symptom:** none observed. This is the one entry here that was fixed before it
+happened, and it is recorded because the failure would have been extremely hard
+to diagnose from its symptoms: readings accumulating normally, the sensor map
+painting normally, and `current_clusters()` returning zero rows forever with no
+error, no exception and every service reporting healthy.
+
+**Root cause:** `observed_at` was whatever the upstream API returned, passed
+through `str()` and inserted into a `TIMESTAMPTZ` column. Nothing parsed or
+validated it. PostgreSQL coerces it at execution: an offset-aware string is
+unambiguous, a naive one is interpreted in the database server's `TimeZone`,
+which nothing in this codebase pins. A shift larger than `READING_WINDOW_MINS`
+pushes every reading outside the `observed_at > now() - interval` filter inside
+`current_clusters()`.
+
+Both current sources emit offset-aware ISO-8601, so this never fired. It was
+latent by luck rather than by validation, and `FloodNetSource` is unimplemented
+with a docstring that merely *asks* the next author for a UTC string.
+
+**Fix:** `normalise_observed_at()` parses, requires an offset, and returns UTC.
+Naive input raises rather than defaulting to UTC, because the zone is genuinely
+unknown and quietly assuming one is exactly how a four hour shift becomes
+invisible.
+
+Enforced in `Reading.__post_init__` rather than at each call site, so a source
+added later cannot reintroduce the path by forgetting to call the helper.
+`USGSSource.fetch` catches it per reading and skips that gauge, because one
+malformed timestamp must not stop the poll for the others.
+
+**Prevention:** two rules, and the second is the one that generalises.
+
+A value crossing into a typed database column is validated at the producer or it
+is not validated at all. The column will accept it and the failure surfaces
+somewhere unrelated, in this case as an empty result set three joins away.
+
+And: put an invariant on the type, not in the layers that use it. E-014, E-022
+and E-025 were a single defect, source-specific thresholds, fixed three separate
+times because the rule lived in the dispatcher, then the frontend, then the SQL
+defaults, instead of in one place all three had to go through. This one is on
+the dataclass.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

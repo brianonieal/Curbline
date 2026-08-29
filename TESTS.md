@@ -4,7 +4,7 @@ Registry per the testing skill. No test in this suite touches a real AWS
 account or incurs spend: moto stands in for SQS, SNS and S3, and the database
 layer is stubbed.
 
-**Current: 68 passing, 0 failing.**
+**Current: 76 passing, 0 failing.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
@@ -31,6 +31,7 @@ documents for `scripts/gate-check.sh`.
 | `TestSourceCalibration` | 3 | D-005 threshold mapping per source, and that an unrecognised source falls back to the sensitive calibration |
 | `TestZoneLookupTypes` | 1 | E-017: a UUID-typed zone_id from the database still matches the string in the queue body, so a forming zone promotes |
 | `TestSensorCacheDivergence` | 1 | E-016: a foreign key violation repairs the sensor row and retries the insert once |
+| `TestReadingTimestamps` | 8 | E-028: observed_at must carry a UTC offset, enforced on the Reading dataclass so no source can bypass it; a bad gauge skips its reading, not the poll |
 | `TestAuditProvenance` | 3 | E-027: the audit record names the parameters the correlator actually clustered with, and discloses a fallback rather than substituting silently |
 | `TestUSGSBaselinePersistence` | 7 | E-026: the baseline survives a restart via Redis, a failed lookup backs off, and a site with no datum is withheld rather than published as a zero rise |
 | `TestCacheStatsTransport` | 5 | E-019: counters publish to Redis and clear, a failed flush retains the deltas rather than under-reporting the incident that caused it, and an unknown hit rate reads null rather than 0.0 |

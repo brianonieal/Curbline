@@ -497,6 +497,95 @@ class TestUSGSBaselinePersistence:
             assert src.resolve_baseline("01300000") == 3.0
 
 
+class TestReadingTimestamps:
+    """
+    Limitation 11, now E-028. `observed_at` was whatever the upstream API
+    returned, `str()`-ed and inserted into a TIMESTAMPTZ column. PostgreSQL
+    parses it at execution: an offset-aware string is unambiguous, a naive one
+    is interpreted in the server's timezone.
+
+    A shift larger than the 15 minute reading window pushes every reading
+    outside `current_clusters()`'s filter. Rows accumulate, the sensor map
+    paints normally, and clustering returns nothing forever with no error and no
+    exception. That is the E-013 and E-017 signature exactly: silent, plausible,
+    and invisible to a test suite that never executes SQL.
+    """
+
+    def test_an_offset_aware_timestamp_is_kept_as_utc(self):
+        from curbline.sources import normalise_observed_at
+        got = normalise_observed_at("2026-08-28T12:00:00-04:00")
+        assert got == "2026-08-28T16:00:00+00:00"
+
+    def test_a_z_suffix_is_accepted(self):
+        from curbline.sources import normalise_observed_at
+        assert normalise_observed_at("2026-08-28T16:00:00Z") == \
+            "2026-08-28T16:00:00+00:00"
+
+    def test_a_naive_timestamp_is_rejected(self):
+        """
+        The one that matters. There is no way to know what zone this means, and
+        guessing UTC is how a four hour shift becomes invisible.
+        """
+        from curbline.sources import normalise_observed_at
+        with pytest.raises(ValueError, match="offset"):
+            normalise_observed_at("2026-08-28T12:00:00")
+
+    def test_an_unparseable_timestamp_is_rejected(self):
+        from curbline.sources import normalise_observed_at
+        with pytest.raises(ValueError):
+            normalise_observed_at("last tuesday")
+
+    def test_one_bad_timestamp_skips_its_reading_not_the_poll(self):
+        """
+        A malformed timestamp on one gauge must not stop the collector. The
+        reading is dropped and logged; the other gauges still report.
+        """
+        from curbline.sources import USGSSource
+        src = USGSSource((-74.3, 40.4, -73.6, 41.0))
+        payload = {"features": [
+            {"geometry": {"coordinates": [-73.9, 40.7]},
+             "properties": {"value": "8.0", "time": "2026-08-28T12:00:00",
+                            "monitoring_location_id": "bad",
+                            "monitoring_location_name": "Naive Creek"}},
+            {"geometry": {"coordinates": [-73.8, 40.6]},
+             "properties": {"value": "8.0", "time": "2026-08-28T12:00:00Z",
+                            "monitoring_location_id": "good",
+                            "monitoring_location_name": "Aware Creek"}},
+        ]}
+        resp = mock.MagicMock()
+        resp.json.return_value = payload
+        with mock.patch.object(src.session, "get", return_value=resp), \
+             mock.patch.object(src, "resolve_baseline", return_value=6.0):
+            readings = list(src.fetch())
+        assert [r.sensor_id for r in readings] == ["usgs:good"]
+
+    def test_the_replay_fixture_timestamps_are_acceptable(self):
+        """The demo source. If this ever regresses, the demo silently stops."""
+        from curbline.sources import normalise_observed_at
+        from datetime import datetime, timezone
+        normalise_observed_at(datetime.now(timezone.utc).isoformat())
+
+    def test_the_reading_type_itself_rejects_a_naive_timestamp(self):
+        """
+        Enforced on the dataclass, not at each call site. A source added later
+        cannot reintroduce this by forgetting to call the helper, which is how
+        E-014 survived being fixed in three separate layers.
+        """
+        from curbline.sources import Reading
+        with pytest.raises(ValueError, match="offset"):
+            Reading(ingest_id="i", sensor_id="s", name="n", lon=0.0, lat=0.0,
+                    observed_at="2026-08-28T12:00:00", depth_cm=1.0,
+                    source="test")
+
+    def test_a_valid_reading_is_normalised_on_construction(self):
+        from curbline.sources import Reading
+        r = Reading(ingest_id="i", sensor_id="s", name="n", lon=0.0, lat=0.0,
+                    observed_at="2026-08-28T12:00:00-04:00", depth_cm=1.0,
+                    source="test")
+        assert r.observed_at == "2026-08-28T16:00:00+00:00"
+        assert r.to_message()["observed_at"] == "2026-08-28T16:00:00+00:00"
+
+
 class TestAuditProvenance:
     """
     Limitation 12, now E-027. The S3 audit record exists to say why a decision
