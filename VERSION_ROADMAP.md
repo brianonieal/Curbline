@@ -51,12 +51,13 @@ efficient shape is one window that satisfies all four and ends in teardown.
 
 ### What is different since the last live run, and why that is a risk
 
-Eleven defects were fixed on 2026-08-28 after the v0.5.0 capture: E-020 through
-E-030. Two were severe. **None of that code has ever executed against real
-managed services.** 91 unit tests and 18 console checks pass, and moto is not
-PostGIS, which is the exact blind spot that produced E-013 and E-017 in the
-first place. `scripts/preflight.py` exists to close as much of that gap as can
-be closed in thirty seconds.
+Sixteen defects were fixed on 2026-08-28 after the v0.5.0 capture: E-020
+through E-034. Two were severe and four sat in the provisioning and teardown
+scripts themselves. **None of that code has ever executed against real managed
+services.** 95 unit tests and 18 console checks pass, and moto is not PostGIS,
+which is the exact blind spot that produced E-013 and E-017 in the first place.
+`scripts/preflight.py` exists to close as much of that gap as can be closed in
+thirty seconds.
 
 The specific things to watch, in the order they would surface:
 
@@ -73,6 +74,13 @@ The specific things to watch, in the order they would surface:
 - **`Reading.__post_init__` now rejects a timestamp with no UTC offset.** Both
   current sources emit offsets, so this should be invisible. If the collector
   starts dropping every reading, this is why.
+- **`alert_for_hull` has a new NULL-expiry predicate** (E-029) that has never
+  run. `preflight.py` asserts its semantics, not just that it parses.
+- **`provision.py` now checkpoints `stack.json` after every resource** and
+  writes the database password before creating the instance (E-034), and
+  **`teardown.py` deletes the billable resources first** and verifies before
+  discarding the record (E-033). Both scripts changed in ways only a real run
+  exercises.
 
 ### Two captures that are not optional
 
@@ -90,8 +98,9 @@ than only in unit tests. Check both by eye before teardown:
 
 ### Estimate, calibrated this time
 
-**3 to 5 hours** from provisioning to submitted. The spread is entirely whether
-the first run surfaces a defect in the nine unexecuted fixes.
+**3 to 5 hours** from provisioning to submitted, now that the Canvas and
+instructor-email steps are gone and the push is done. The spread is entirely
+whether the first run surfaces a defect in the sixteen unexecuted fixes.
 
 That is not the raw sum of the gate estimates below, which total 6 to 8, because
 v0.8.0's report work is already done and only its screenshots remain. It is also
