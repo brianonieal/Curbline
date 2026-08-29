@@ -30,6 +30,7 @@ import pathlib
 import random
 import time
 import uuid
+from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -183,7 +184,11 @@ def build_state() -> dict:
                     a.update(row)
     del _advisories[40:]
 
-    alerts = {"type": "FeatureCollection", "features": []}
+    # Annotated because the inferred value type is the join of str and list,
+    # which makes .append() below unresolvable. gate-check runs mypy scoped to
+    # attribute existence, and an inference artifact in the mock is not worth
+    # weakening that gate for.
+    alerts: dict[str, Any] = {"type": "FeatureCollection", "features": []}
     if any(f["properties"]["under_alert"] for f in zone_features):
         alerts["features"].append({
             "type": "Feature",

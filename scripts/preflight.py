@@ -63,7 +63,7 @@ def main() -> int:
     import psycopg
     from psycopg.rows import dict_row
 
-    conn = None
+    conn: psycopg.Connection | None = None
 
     @check("postgres connect")
     def _():

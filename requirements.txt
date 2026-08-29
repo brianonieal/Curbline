@@ -6,3 +6,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pytest>=8.0
 moto[sqs,sns,s3]>=5.0
+# Dev only, and narrowly scoped: see mypy.ini. gate-check.sh runs it to catch
+# calls to attributes that do not exist on psycopg, redis and boto3 objects,
+# which is the E-013 family and is otherwise only findable at runtime.
+mypy>=1.8

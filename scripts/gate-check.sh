@@ -66,6 +66,20 @@ else
   fail "python compile error. HARD BLOCK."
 fi
 
+# Scoped to attribute existence on typed libraries. See mypy.ini for why every
+# other error code is off. This catches the E-013 family without executing
+# anything: a method that does not exist on a psycopg, redis or boto3 object.
+if $PY -c "import mypy" >/dev/null 2>&1; then
+  if $PY -m mypy curbline/ workers/ api/ infra/ scripts/ \
+       >/tmp/gate-mypy.txt 2>&1; then
+    ok "mypy: no undefined attributes on typed libraries"
+  else
+    fail "mypy found undefined attributes. See /tmp/gate-mypy.txt"
+  fi
+else
+  warn "mypy not installed, skipped the library-attribute check"
+fi
+
 if command -v node >/dev/null 2>&1; then
   node --check web/app.js 2>/dev/null && ok "app.js parses" || fail "app.js syntax error"
   # Parsing only proves it is JavaScript. Seven of the evidence screenshots are
