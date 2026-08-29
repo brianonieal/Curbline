@@ -26,14 +26,14 @@ confirmation link the moment the subscription is created. An unconfirmed
 subscription silently drops every publication, so advisories issued before you
 click it are gone and cannot be replayed into your inbox. This is the item that
 has slipped past two gates; it slips because it feels like it can wait, and it
-cannot.
+cannot. `preflight.py` in the next step fails if any subscription is still
+`PendingConfirmation`, so it will catch you, but only if you run it.
 
 ```bash
-# 3. Prove connectivity before doing anything else.
+# 3. Prove every dependency before starting the units. Thirty seconds here
+#    replaces watching a dashboard fail to tick and guessing why.
 set -a; source .env; set +a
-PGPASSWORD="$CURBLINE_DB_PASSWORD" psql -P pager=off -h "$CURBLINE_DB_HOST" \
-  -U "$CURBLINE_DB_USER" -d "$CURBLINE_DB_NAME" -c "SELECT PostGIS_Full_Version();"
-redis-cli -h "$CURBLINE_CACHE_HOST" ping
+python3 scripts/preflight.py
 
 # 4. Cache degradation test, FIRST, not last. Full procedure below under
 #    "Run this FIRST". Capture the amber pair, restore, confirm green.
