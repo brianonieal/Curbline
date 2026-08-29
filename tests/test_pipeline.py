@@ -150,6 +150,44 @@ class TestRecessionIsDrivenByAbsence:
         from workers.dispatcher import sweep_state
         assert sweep_state("closed") is None
 
+    def test_the_sweep_advances_every_stale_zone(self):
+        """
+        sweep_state is the decision; sweep_zones is the thing that actually
+        runs, in a daemon thread, and it was the untested half. poll_loop
+        swallows exceptions, so a broken sweep would not crash the dispatcher.
+        Zones would simply never close and E-020 would look fixed.
+        """
+        from workers import dispatcher
+        stale = [{"zone_id": "z1", "state": "active"},
+                 {"zone_id": "z2", "state": "receding"},
+                 {"zone_id": "z3", "state": "forming"}]
+        wrote = []
+        with mock.patch.object(dispatcher.db, "stale_open_zones",
+                               return_value=stale), \
+             mock.patch.object(dispatcher.db, "set_zone_state",
+                               side_effect=lambda z, s: wrote.append((z, s))):
+            dispatcher.sweep_zones()
+        assert wrote == [("z1", "receding"), ("z2", "closed"),
+                         ("z3", "receding")]
+
+    def test_the_sweep_queries_with_the_configured_staleness(self):
+        from workers import dispatcher
+        from curbline import config
+        with mock.patch.object(dispatcher.db, "stale_open_zones",
+                               return_value=[]) as q, \
+             mock.patch.object(dispatcher.db, "set_zone_state"):
+            dispatcher.sweep_zones()
+        q.assert_called_once_with(config.ZONE_STALE_MINUTES)
+
+    def test_staleness_exceeds_the_reading_window(self):
+        """
+        A zone must not be retired while its readings are still inside the
+        window that produced it, or a live flood would flicker closed and
+        reopen every cycle.
+        """
+        from curbline import config
+        assert config.ZONE_STALE_MINUTES > config.READING_WINDOW_MINS
+
 
 class TestAdvisorySuppression:
     """
@@ -482,6 +520,36 @@ class TestUSGSBaselinePersistence:
             src.resolve_baseline("01300000")
             src.resolve_baseline("01300000")
         assert fetch.call_count == 1, "failed lookups must back off"
+
+    def test_the_stored_value_round_trips_through_redis(self):
+        """
+        The persistence itself, not mocked around it. A datum that does not
+        survive the write/read is E-026 with extra steps.
+        """
+        from curbline import cache
+        store = {}
+        fake = mock.MagicMock()
+        fake.setex.side_effect = lambda k, ttl, v: store.__setitem__(k, v)
+        fake.get.side_effect = lambda k: store.get(k)
+        cache._client = None
+        with mock.patch.object(cache, "client", return_value=fake):
+            cache.set_baseline("01300000", 2.375)
+            assert cache.get_baseline("01300000") == 2.375
+        key, ttl, _ = fake.setex.call_args.args
+        assert key == "baseline:01300000"
+        assert ttl == cache.BASELINE_TTL_SECONDS
+
+    def test_a_corrupt_stored_baseline_is_ignored_not_trusted(self):
+        """
+        A garbage datum is worse than none: it silently rescales every reading
+        from that site. Treat it as absent and re-derive.
+        """
+        from curbline import cache
+        fake = mock.MagicMock()
+        fake.get.return_value = "not-a-number"
+        cache._client = None
+        with mock.patch.object(cache, "client", return_value=fake):
+            assert cache.get_baseline("01300000") is None
 
     def test_an_unreachable_cache_still_resolves_by_fetching(self):
         """Redis being down slows this down; it must not break it."""

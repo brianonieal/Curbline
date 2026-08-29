@@ -78,7 +78,7 @@ thresholds move with the source; the dispatcher, the frontend and the SQL
 defaults each did not implement it, and each fix stopped one layer short.
 
 ### Added
-- 45 tests. 31 to 76. `should_notify`, `sweep_state` and `health_status`
+- 50 tests. 31 to 81. `should_notify`, `sweep_state` and `health_status`
   extracted as pure functions so the decisions they encode are testable with
   reachable inputs, which is the direct lesson of E-020: the suite asserted
   `next_state("active", 1) == "receding"` and passed, on an argument the

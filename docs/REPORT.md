@@ -435,7 +435,7 @@ zone marker, not a flood extent measurement, and must not be read as one.
 
 ### 6.2 Unit tests
 
-76 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
+81 tests, all passing. moto stands in for SQS, SNS and S3; the database layer is
 stubbed. **No test touches a real AWS account or incurs spend**, which is
 enforced mechanically by `scripts/gate-check.sh` at every gate close.
 
@@ -457,11 +457,11 @@ happy path, duplicate delivery, a failing downstream, and a cold cache.
 | `TestCacheStatsTransport` | 5 | E-019: counters publish and clear, a failed flush retains them, and an unknown hit rate reads null rather than zero |
 | `TestWorkerHeartbeat` | 4 | E-023: a silent worker reads as not live, and an unreachable cache reads as unknown rather than dead |
 | `TestHealthVerdict` | 5 | E-023: a stopped component degrades the system verdict; unknown liveness does not |
-| `TestRecessionIsDrivenByAbsence` | 4 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
+| `TestRecessionIsDrivenByAbsence` | 7 | E-020: recession is swept for, not inferred from a count the producer already guaranteed |
 | `TestAdvisorySuppression` | 6 | E-021: escalation notifies even when state is unchanged; a NULL last level does not silence the first advisory |
 | `TestReadingTimestamps` | 8 | E-028: an offset is required and normalised to UTC on the type itself, and one bad gauge skips its reading rather than the poll |
 | `TestAuditProvenance` | 3 | E-027: the record names the parameters that produced the cluster, and a substituted value says it was substituted |
-| `TestUSGSBaselinePersistence` | 7 | E-026: the datum survives a restart, and a site with no datum is withheld rather than reported as zero rise |
+| `TestUSGSBaselinePersistence` | 9 | E-026: the datum survives a restart, and a site with no datum is withheld rather than reported as zero rise |
 
 **What this suite could not catch, stated rather than hidden.** The suite is
 moto throughout and never executed SQL against a real PostGIS instance or
@@ -697,7 +697,7 @@ api/             FastAPI presentation layer, not a graded component
 infra/           account-setup.sh, bootstrap.sh, provision.py, teardown.py, iam-policy.json
 sql/             schema.sql, including current_clusters() and alert_for_hull()
 web/             single-page console: index.html, app.js, style.css
-tests/           76 unit tests plus fixture_clusters.sql
+tests/           81 unit tests plus fixture_clusters.sql
 systemd/         four unit files
 data/            capture_replay.py and the disclosed replay fixture
 docs/            this report
