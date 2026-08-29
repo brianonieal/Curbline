@@ -326,9 +326,15 @@ preserved. Frames are subsampled at a fixed interval and `ReplaySource` stamps
 `observed_at` with `now()`, so the replay reproduces the shape and spacing of
 the event, compressed, not the event as it occurred. The 4.7 MB raw download is
 not committed; the 162 KB derived fixture is, and the converter regenerates it.
-The fixture also contains only sensors that flooded, because the dataset records
-flood events and not quiet periods, so there are no genuinely dry sensors on the
-map.
+The fixture also contains only sensors that recorded a flood. Of the 313 sensors
+deployed and not yet removed on 2025-10-30, 126 recorded an event and are in the
+fixture; 187 were live but silent, 128 were installed afterwards, and 38 had been
+removed. Those 187 are silent rather than dry: no event row could mean read zero,
+offline, or wet but under FloodNet's trigger, and the dataset cannot tell those
+apart. They are absent rather than rendered at 0.0, and there is no flag to
+include them, because a switch whose only possible output is a false claim is
+worse than no switch. The honest rendering is a fourth console state, deployed
+with no data, which is a UI change and is not done.
 
 **Flips if:** FloodNet publishes a continuous raw-reading feed including
 non-event periods, or `CURBLINE_SOURCE=floodnet` runs live against a real storm.

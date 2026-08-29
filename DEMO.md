@@ -38,7 +38,7 @@ not the instance (E-008), and the mailbox for the SNS subscription open.
 | 0:25 | `preflight.py`, and read it. Do not start units if it fails | 2m |
 | 0:27 | Confirm the SNS subscription from the inbox | 3m |
 | 0:30 | `preflight.py` again. Must pass | 2m |
-| 0:32 | Point at `replay.escalation.json`, verify with `show-environment` | 5m |
+| 0:32 | Point at `replay.floodnet.json`, verify with `show-environment` | 5m |
 | 0:37 | Let the pipeline run. Capture the 3 AWS console tabs in this window | 10m |
 | 0:47 | Cache degradation: revoke, restart api, capture amber, restore | 15m |
 | 1:02 | Four terminal captures | 15m |
@@ -88,14 +88,23 @@ wait.
 .venv/bin/python scripts/preflight.py
 
 # ---- 0:32  The escalation fixture, and verify it took.               5m
+#      replay.floodnet.json is the recorded 2025-10-30 FloodNet event: real
+#      sensor ids, real coordinates, real recorded depths. At peak it forms six
+#      simultaneous zones across four boroughs, and the Throgs Neck pair
+#      (Ditmars St / Tier St) holds membership constant while climbing
+#      monitor -> advisory -> warning and then receding, which is the ladder
+#      proof. The network fully drains, so the E-020 sweep has real recession
+#      to close. See D-015 and limitation 9.
+#
+#      The older synthetic fixtures stay in the repo and are NOT what you run.
 #      replay.example.json CANNOT produce a ladder: it grows its wet set as
 #      the storm deepens, zone identity is a membership hash (D-003), so every
 #      depth tier becomes a NEW zone. A correct system running it produces one
 #      advisory per zone, which looks exactly like the E-021 defect. See E-030.
-REPLAY=/home/ubuntu/curbline/data/replay.escalation.json
+REPLAY=/home/ubuntu/curbline/data/replay.floodnet.json
 sudo systemctl set-environment CURBLINE_REPLAY_FILE=$REPLAY
 sudo systemctl restart 'curbline-*'
-systemctl show-environment | grep CURBLINE_REPLAY_FILE   # must end in escalation
+systemctl show-environment | grep CURBLINE_REPLAY_FILE   # must end in floodnet
 
 # ---- 0:37  Let it run. Do NOT capture the console yet.              10m
 #      The cache hit rate is published to Redis from the worker loop between
@@ -150,7 +159,8 @@ tests:
 - `advisories-per-zone.txt` shows a zone with **more than one** advisory and a
   rising ladder, `monitor -> advisory -> warning`. One row per zone means either
   E-021 is still suppressing escalation, or you are running the wrong fixture.
-  Check `CURBLINE_REPLAY_FILE` before concluding the fix is broken.
+  Check `CURBLINE_REPLAY_FILE` ends in `floodnet` before concluding the fix
+  is broken.
 - `zone-states.txt` shows a zone that is not `forming` or `active`. All zones
   open forever means E-020's sweep thread is not running. It is not silent:
   `poll_loop` logs `poll iteration failed, continuing`, so grep the dispatcher

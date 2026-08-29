@@ -33,6 +33,27 @@ This is coursework. It is not an operational warning system, it has not been
 validated against ground truth, and no one should make a safety decision with
 it. Detection thresholds are documented choices, not calibrated values.
 
+## The demonstration data
+
+The end-to-end demonstration replays recorded FloodNet readings from the street
+flooding of **30 October 2025**, published on NYC Open Data and converted by
+`data/convert_floodnet.py`. Real sensor ids, real coordinates, real recorded
+depths, converted from inches to centimetres and not otherwise adjusted.
+
+Two things about it are worth knowing before you read a screenshot. The replay
+preserves the shape and spacing of the event but **not its original
+timestamps**: frames advance one per poll and readings are stamped with the
+current time, so it is a recording played back rather than that afternoon
+reconstructed. And the console shows 126 sensors where 313 were deployed,
+because FloodNet publishes flood events rather than continuous readings: 126
+recorded an event, 187 were live but silent, 128 were installed later and 38 had
+been removed. The 187 are silent, not dry, and are absent rather than drawn at
+zero, because no event row cannot distinguish read-zero from offline from
+below-trigger. Limitation 9 in `docs/REPORT.md` has the full accounting.
+
+Everything downstream of the injection point, the queues, the clustering, the
+advisory ladder and the audit trail, runs unmodified.
+
 ---
 
 ## Architecture
@@ -297,6 +318,7 @@ api/server.py           Presentation layer (not a required component)
 api/mock_server.py      Runs the console with no AWS, for frontend work
 web/                    Console: index.html, style.css, app.js
 data/capture_replay.py  Records a live storm for demo replay
+data/convert_floodnet.py Builds the replay fixture from recorded FloodNet readings
 systemd/                Service units
 tests/                  Clustering fixture and 95 unit tests
 docs/REPORT.md          The report, mapped to the rubric

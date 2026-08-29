@@ -22,14 +22,29 @@ SOURCE DATASETS, both NYC Open Data, downloaded 2026-08-29:
       date: 313 sensors were deployed and not yet removed on 2025-10-30, of
       which 126 recorded a flood event.
 
-NO DRY SENSORS. The other 187 sensors that were live that day are NOT in this
-fixture, so every sensor on the map is one that flooded. That is a property of
-the source: the events dataset records floods, not quiet periods, so a live
-sensor that stayed dry produces no row and therefore no reading. Their absence
-could be inferred into a 0.0 reading, and deliberately is not: absence of a
-flood event is evidence a sensor stayed under the event trigger, not a
-measurement that it read zero. Inventing the measurement is the one thing this
-whole conversion exists to avoid.
+THE NETWORK ON 2025-10-30, from Date Installed and Date Removed:
+
+    313  deployed and not yet removed
+    126  recorded a flood event, and are in this fixture
+    187  live but SILENT: no event row, therefore no reading
+    128  installed after the event, could not have reported
+     38  removed before it
+
+The 187 are silent, not dry, and the difference is the whole reason they are
+absent. A sensor with no event row could have read zero, could have been
+offline, or could have been wet but under FloodNet's event trigger. The events
+dataset records floods rather than quiet periods, so it cannot distinguish
+those three, and nothing else in the download can either.
+
+Emitting 0.0 for them would assert a measurement that was never taken, and
+would assert it surrounded by real data, where it is far harder to spot than a
+wholly synthetic fixture. There is deliberately no flag for it. A switch whose
+only possible output is a false claim is worse than no switch, because the
+reason it defaults off does not survive contact with six months.
+
+The honest rendering of a silent sensor is a fourth console state, deployed
+with no data, distinct from the "reporting dry" the legend offers today. That
+is a UI change and it is not done.
 
 EVENT SELECTED: 2025-10-30, the largest multi-sensor day in the download.
 109 sensors crossed 5 cm; 126 have samples in the window

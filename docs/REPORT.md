@@ -596,41 +596,88 @@ Twelve, stated plainly.
 8. **The database credential is in a mode-600 env file.** The assignment's
    permitted service list excludes Secrets Manager (D-011). This is
    constraint-driven and is not good practice.
-9. **The sensor input to the end-to-end demonstration was synthetic. Everything
-   downstream of it was real.** No flooding occurred anywhere in the capture
-   window, so no genuine reading would cross a detection threshold. The pipeline
-   was therefore exercised with synthetic readings from
-   `data/replay.example.json`, a four-frame progression written for interface
-   testing, and `data/replay.escalation.json`, a six-frame progression written
-   afterwards for a reason worth stating: the first fixture **cannot**
-   demonstrate that a zone escalates. Zone identity is a hash of the member
-   sensor set (D-003), and in that fixture the wet set grows as the storm
-   deepens, so each depth tier produces a different zone_id and every tier is a
-   brand new zone. A fully working system yields exactly one advisory per zone
-   from it. The second fixture holds membership constant and raises depth
-   through the tiers instead, which is the only way this system's advisory
-   ladder can be observed at all. Both are replayed through the live production
-   stack. See E-030.
+9. **The sensor input to the end-to-end demonstration is a recording of a real
+   flood, replayed. Everything downstream of it was real.** No flooding occurred
+   anywhere in the capture window, so no live reading would cross a detection
+   threshold. The pipeline was therefore exercised with
+   `data/replay.floodnet.json`, built by `data/convert_floodnet.py` from two NYC
+   Open Data downloads: *FloodNet: Street Flooding Events Measured by FloodNet
+   Sensors*, and *FloodNet: Sensor Deployment Metadata* (`ag7h-2pg6`). The event
+   is **30 October 2025**, 17:23 to 01:44 GMT, the largest multi-sensor day in
+   the download.
 
-   That needs stating precisely, because "replay data" covers three different
-   situations and they are not equivalent. This was **not** a recording of a
-   real storm, and it was **not** live gage data with the detection threshold
-   lowered until something tripped, which `DEMO.md` explicitly warns against
-   screenshotting. It was fabricated depth values on five fabricated sensor ids
-   in the `demo:` namespace, injected at the very top of the pipeline.
+   The sensor ids, the coordinates and the depths are the ones FloodNet
+   recorded. The events dataset is one row per flood per sensor and reads like a
+   summary table, but it carries the underlying series inline, 353,771 samples
+   at a median 63-second cadence, and those samples are what is replayed.
+   Nothing is interpolated between summary endpoints and no depth value was
+   written by hand. Depths convert from inches by x 2.54 and are not otherwise
+   adjusted: they are already depth above ground rather than range to the water
+   surface, which was verified before being relied on. 478 of the first 500
+   events begin at exactly 0.00 and the file contains no negative sample
+   anywhere. That check is what makes the conversion a single multiplication
+   instead of the per-site baseline that USGS gage height requires (E-001).
 
-   From that injection point onward nothing was simulated. SQS carried every
-   message under at-least-once delivery. The correlator wrote through the real
-   idempotency gate into RDS. PostGIS executed the actual `ST_ClusterDBSCAN`
-   over real geometry and returned real hulls. The dispatcher applied the real
-   advisory ladder, wrote real immutable audit objects to S3, and published to
-   SNS, which returned message ids now recorded in the `advisories` table.
+   **The replay does not preserve the clock.** Frames are subsampled at a fixed
+   interval, and `ReplaySource` stamps `observed_at` with the current time and
+   advances one frame per poll. So the demonstration reproduces the *shape and
+   spacing* of the 30 October event, compressed, not the event as it occurred.
+   It is a recording played back, not a reconstruction of that afternoon's
+   timeline.
+
+   **The gap is in the readings, not in the network.** The console shows 126
+   sensors, and rather more than that were deployed. `Date Installed` and
+   `Date Removed` in `ag7h-2pg6` account for the difference exactly:
+
+   | On 2025-10-30 | Sensors |
+   |---|---|
+   | Deployed and not yet removed | 313 |
+   | Recorded a flood event, and are in the fixture | 126 |
+   | Live but **silent**: no event row, therefore no reading | 187 |
+   | Installed after the event, could not have reported | 128 |
+   | Removed before it | 38 |
+
+   The 187 are silent rather than dry, and that distinction decides how they are
+   handled. A sensor with no event row could have read zero, could have been
+   offline, or could have been wet but under FloodNet's event trigger. The
+   dataset records floods rather than quiet periods, so it cannot separate those
+   three and neither can anything else in the download. Rendering them at 0.0 cm
+   would assert a measurement that was never taken, and would assert it
+   surrounded by real data, where it is harder to detect than a wholly synthetic
+   fixture would be. They are therefore absent, and there is deliberately no
+   option to include them. The honest rendering of a silent sensor is a fourth
+   console state, deployed with no data, distinct from the "reporting dry" the
+   legend offers today. That is a user interface change and it is not done.
+
+   One further sensor, `BK-w-st-kent-st-31i7yc`, has events but no deployment
+   metadata and therefore no coordinates. It is dropped rather than placed at a
+   guessed location.
+
+   This replaces the synthetic fixtures for the demonstration.
+   `data/replay.example.json` and `data/replay.escalation.json` remain in the
+   repository, and why the second one exists is still worth stating, because it
+   describes this system rather than the data. Zone identity is a hash of the
+   member sensor set (D-003), so in a fixture whose wet set grows as the storm
+   deepens, each depth tier produces a different `zone_id` and a fully working
+   system yields exactly one advisory per zone. See E-030. The recorded event
+   does not have that problem everywhere: at peak it forms six simultaneous
+   zones across four boroughs, and one of them, Ditmars Street and Tier Street
+   in Throgs Neck, holds its membership constant while climbing monitor to
+   advisory to warning and then receding. That is the advisory ladder observed
+   on real water rather than on values chosen to produce it.
+
+   From the injection point onward nothing is simulated. SQS carries every
+   message under at-least-once delivery. The correlator writes through the real
+   idempotency gate into RDS. PostGIS executes the actual `ST_ClusterDBSCAN`
+   over real geometry and returns real hulls. The dispatcher applies the real
+   advisory ladder, writes real immutable audit objects to S3, and publishes to
+   SNS.
 
    The distributed system is real, and the distributed system is what this
-   assignment grades. The weather is synthetic, and the weather is not something
-   I control. A live USGS run on the same afternoon correctly produced zero
-   advisories, which is the honest result for a dry day and demonstrates nothing
-   whatsoever about the notification path.
+   assignment grades. What is replayed rather than live is the weather. A live
+   USGS run on the capture afternoon correctly produced zero advisories, which
+   is the honest result for a dry day and demonstrates nothing whatever about
+   the notification path.
 
 10. **A USGS site with no resolvable baseline is not reported at all.** This is
     the residue of a defect rather than the defect itself, and the trade is
@@ -761,10 +808,10 @@ teardown consumes a month's allowance.
 ## Appendix C: Full screenshot set
 
 Every screenshot states which data source produced it. Captures marked
-**replay** used a synthetic progression from `data/`, and are disclosed as
-replays here and in `curbline/sources.py`. Captures showing the advisory ladder
-used `replay.escalation.json`; earlier captures used `replay.example.json`.
-Limitation 9 explains why two fixtures exist.
+**replay** used `data/replay.floodnet.json`, recorded FloodNet readings from the
+street flooding of 30 October 2025, and are disclosed as replays here and in
+`curbline/sources.py`. Limitation 9 gives the provenance, the unit conversion,
+and what the replay does and does not preserve.
 No capture in the reduced set is live gage data. Every capture that shows
 detection output is a replay, and the console baseline that ran against live
 USGS on a dry day is one of the eleven skipped. Limitation 9 is the place that
