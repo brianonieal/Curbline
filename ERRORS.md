@@ -1090,6 +1090,54 @@ mapped a failure onto the convenient answer.
 
 ---
 
+## E-034 - An interrupted provision leaves a database nobody can log into
+**Found:** 2026-08-28, v0.7.0 | **Status:** FIXED 2026-08-28 | **Cost:** found by audit; the failure mode is an unbilled-for, unreachable, undeletable instance
+
+**Symptom:** none observed, because the one real provisioning run completed.
+The window it leaves open is about ten minutes wide and easy to hit.
+
+**Root cause:** `provision.py` wrote `infra/stack.json` exactly once, at the
+very end, after both `create_rds` and `create_cache` had returned. `create_rds`
+calls `create_db_instance` and then blocks on a waiter for up to twenty minutes
+while the instance comes up.
+
+Everything created before that point exists and is billing. Nothing on disk
+names any of it. If the waiter times out, the SSH session drops, someone hits
+Ctrl-C, or `create_cache` raises, the script dies and `stack.json` is never
+written. `teardown.py` reads that file and only that file, so the resources
+cannot be torn down by the tooling at all.
+
+The worse half is the credential. `make_password()` generated the RDS master
+password in memory and it reached `.env` only in the same final block. An
+interruption during the RDS wait therefore produced a database that bills
+hourly, that no record names, **and whose master password no longer exists
+anywhere**. It cannot be connected to, only reset or deleted by hand.
+
+**Fix:** `stack.json` is now checkpointed after every resource, so the record
+always describes at least as much as exists. The db identifier and cache cluster
+id are written *before* their create calls, since both are deterministic
+(`curbline-db`, `curbline-cache`) and teardown needs only the name. Verified by
+running teardown against a partial record: it plans the RDS and ElastiCache
+deletions correctly with no endpoint information present.
+
+The password is written to `.env` at mode 600 **before** the instance that uses
+it is created, and `.env` is rewritten in full at the end. On the happy path
+nothing changes. On the unhappy path the credential survives, which is the
+entire point.
+
+**Prevention:** **a record of a resource must be durable before the resource
+is, not after.** The natural way to write this code is to gather everything and
+serialise once at the end, and that ordering is wrong for anything that bills:
+the gap between "it exists" and "it is written down" is exactly the window where
+an interruption becomes unrecoverable.
+
+This is E-033 from the other side. There, teardown deleted its record before
+confirming the resources were gone. Here, provision created resources before
+writing the record. Both leave the same state: something running, and nothing
+that says what it is called.
+
+---
+
 ## E-0NN — [symptom in the words you would search for]
 **Found:** [date], [gate] | **Status:** [FIXED / OPEN / KNOWN LIMITATION] | **Cost:** [time lost]
 

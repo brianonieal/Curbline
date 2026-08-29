@@ -55,6 +55,12 @@ each boundary specifically found six more.
 - **E-025.** A hand-run `current_clusters()` answers at FloodNet calibration
   whatever the source. Documented loudly; the committed evidence query now
   passes its parameters explicitly.
+- **E-034.** `provision.py` wrote `stack.json` once at the very end, after a
+  ten minute blocking wait on RDS. An interruption in that window left an
+  instance billing hourly with nothing naming it, and the master password,
+  generated in memory and written only in that same final block, gone entirely.
+  The record is now checkpointed after every resource and the password is
+  persisted before the instance that uses it exists.
 - **E-033.** Teardown deleted the free resources first and the hourly-billing
   ones last, so an error on a queue deletion aborted the run with RDS and
   ElastiCache still running. It also treated any ElastiCache error as "gone",

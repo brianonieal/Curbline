@@ -274,7 +274,7 @@ ElastiCache bill by the hour whether or not anything is using them.
 CLAUDE.md               Project instructions for Claude Code (read first)
 VERSION_ROADMAP.md      Gated roadmap, v0.5.0 through v2.0.0
 DECISIONS.md            14 decisions, each with a flip condition
-ERRORS.md               33 logged defects, mostly fixed. Do not rediscover.
+ERRORS.md               34 logged defects, mostly fixed. Do not rediscover.
 TESTS.md                Test registry and stated coverage gaps
 RETENTION.md            Cold-defense drill log and flip watch
 CHANGELOG.md            Version history

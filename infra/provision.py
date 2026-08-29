@@ -430,26 +430,60 @@ def main() -> None:
 
     attach_sg_to_self(ec2, app_sg)
 
-    queues = create_queues(sqs)
-    topic_arn = create_topic(sns)
-    bucket = create_bucket(s3, args.region, account_id)
-
-    password = make_password()
-    db = create_rds(rds, subnet_ids, db_sg, password)
-    cache = create_cache(ecache, subnet_ids, cache_sg)
-
-    stack = {
+    # stack.json is the ONLY record of what to delete, and teardown reads it.
+    # It used to be written once, at the very end, after create_rds had already
+    # blocked for ten minutes waiting on the instance to come up. Anything that
+    # interrupted that window (waiter timeout, dropped SSH session, Ctrl-C, or
+    # create_cache raising) left an RDS instance billing hourly with nothing on
+    # disk naming it. Checkpoint after each resource instead, so the record
+    # always describes at least as much as exists. See E-034.
+    stack: dict = {
         "region": args.region,
         "vpc_id": vpc_id,
         "subnet_ids": subnet_ids,
         "security_groups": {"app": app_sg, "db": db_sg, "cache": cache_sg},
-        "queues": queues,
-        "sns_topic_arn": topic_arn,
-        "audit_bucket": bucket,
-        "db": db,
-        "cache": cache,
     }
+
+    def checkpoint() -> None:
+        STACK_FILE.write_text(json.dumps(stack, indent=2))
+
+    checkpoint()
+
+    stack["queues"] = create_queues(sqs)
+    checkpoint()
+    stack["sns_topic_arn"] = create_topic(sns)
+    checkpoint()
+    stack["audit_bucket"] = create_bucket(s3, args.region, account_id)
+    checkpoint()
+
+    password = make_password()
+
+    # Persist the credential BEFORE the instance that uses it exists. It was
+    # generated here and only written to .env after both create calls returned,
+    # so an interruption during the ten minute RDS wait produced a database
+    # that bills hourly and that nobody can log into. Written mode 600 first,
+    # then rewritten in full below once the endpoints are known.
+    env = STACK_FILE.parent.parent / ".env"
+    env.write_text(f"CURBLINE_DB_PASSWORD={password}\n")
+    env.chmod(0o600)
+    log(f"wrote the database password to {env} before creating the instance")
+
+    # Named ahead of the call so teardown can find the instance even if the
+    # create itself is what fails.
+    stack["db"] = {"identifier": f"{PREFIX}-db"}
+    stack["cache"] = {"cluster_id": f"{PREFIX}-cache"}
+    checkpoint()
+
+    stack["db"] = create_rds(rds, subnet_ids, db_sg, password)
+    checkpoint()
+    stack["cache"] = create_cache(ecache, subnet_ids, cache_sg)
     STACK_FILE.write_text(json.dumps(stack, indent=2))
+
+    # Rebound so the .env write below reads the same values the record holds,
+    # rather than a parallel set of locals that could drift from it.
+    db, cache = stack["db"], stack["cache"]
+    queues, topic_arn = stack["queues"], stack["sns_topic_arn"]
+    bucket = stack["audit_bucket"]
     log(f"wrote {STACK_FILE}")
 
     env = STACK_FILE.parent.parent / ".env"
