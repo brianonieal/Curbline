@@ -1,7 +1,100 @@
 # CURBLINE — VERSION ROADMAP
 
-**Current:** v0.4.1 (code complete, nothing executed against AWS)
+**Current:** v0.7.0 open. v0.5.0 and v0.6.0 are substantively met with two
+items outstanding, both blocked on the same thing.
 **Authority:** this file governs from v0.5.0 forward. Gates close in order.
+
+---
+
+## FROM HERE TO v1.0.0
+
+Written 2026-08-28 after the boundary audit. Read this before the gate
+sections below, which describe the gates in isolation and not the order the
+remaining work actually has to happen in.
+
+### Everything left blocks on one capture session
+
+There is exactly one thing standing between here and submission: a provisioned
+stack, for one sitting. Four gates are waiting on artifacts from it, and none
+of them can advance without it.
+
+| Gate | State | What it still needs |
+|---|---|---|
+| v0.5.0 | 5 of 7 | Confirmed SNS subscription; six console screenshots |
+| v0.6.0 | 7 of 8 | The SNS email, which needs the confirmed subscription |
+| v0.7.0 | 0 of 6 | Every criterion. All need the console served from live state |
+| v0.8.0 | Report done | The 22 screenshots; every other criterion is met |
+| v1.0.0 | Not started | Push, submit, teardown, verify nothing billable |
+
+Do not open these as four separate sessions. The stack bills hourly and the
+per-provision cost is roughly twenty minutes plus RDS creation, so the
+efficient shape is one window that satisfies all four and ends in teardown.
+
+### The sequence
+
+`DEMO.md` opens with the ordered command list. The shape of it:
+
+1. Provision. Confirm the SNS subscription **immediately**, before the pipeline
+   publishes anything. This is the item that has slipped past two gates.
+2. Prove connectivity (PostGIS version, Redis ping) before touching anything
+   else. If it fails, use the five-rung ladder below, not the old abort.
+3. Cache degradation test first, not last. Capture the amber pair, restore,
+   confirm green.
+4. Let the replay storm run until a zone shows a second advisory. That is the
+   evidence for E-021 and it does not exist until escalation happens.
+5. `./scripts/capture-evidence.sh`, then read `docs/evidence/cli/MANIFEST.md`.
+6. Screenshots, to the filenames already fixed in `DEMO.md` and Appendix C.
+7. Commit evidence **while the stack is still up**.
+8. Teardown, then verify nothing billable survived.
+
+### What is different since the last live run, and why that is a risk
+
+Nine defects were fixed on 2026-08-28 after the v0.5.0 capture: E-020 through
+E-028. Two were severe. **None of that code has ever executed against real
+managed services.** 81 unit tests pass and moto is not PostGIS, which is the
+exact blind spot that produced E-013 and E-017 in the first place.
+
+The specific things to watch, in the order they would surface:
+
+- **`db.open_zones()` carries a new LEFT JOIN LATERAL** against `advisories` to
+  fetch `last_level`. This is new SQL that has never run. If the dispatcher
+  throws on its first message, look here first.
+- **The dispatcher now starts a daemon thread** running `sweep_zones()` on a
+  cadence. `poll_loop` swallows exceptions, so a failure here is silent: zones
+  would never close and E-020 would appear fixed while being exactly as broken.
+  `zone-states.txt` from the capture script is the check.
+- **Workers now write heartbeats to Redis** on every loop. If Redis is
+  unreachable this logs a warning per iteration, which will clutter the
+  `journalctl` screenshots without breaking anything.
+- **`Reading.__post_init__` now rejects a timestamp with no UTC offset.** Both
+  current sources emit offsets, so this should be invisible. If the collector
+  starts dropping every reading, this is why.
+
+### Two captures that are not optional
+
+They are the only proof that the two severe fixes work in production rather
+than only in unit tests. Check both by eye before teardown:
+
+- `advisories-per-zone.txt` shows a zone with **more than one** advisory and a
+  rising ladder. One row per zone means E-021 is still suppressing escalation.
+- `zone-states.txt` shows a zone that is not `forming` or `active`. All zones
+  open forever means the E-020 sweep is not running.
+
+### Estimate, calibrated this time
+
+**3 to 5 hours** from provisioning to submitted. The spread is entirely whether
+the first run surfaces a defect in the nine unexecuted fixes.
+
+That is not the raw sum of the gate estimates below, which total 6 to 8, because
+v0.8.0's report work is already done and only its screenshots remain. It is also
+not lower, because this project's track record is that the first execution of
+new code against real infrastructure finds something, and there is more new code
+here than at any point since v0.5.0.
+
+Phase A has already consumed roughly 16 to 17 hands-on hours against an 11 to 17
+hour estimate, so it will overrun regardless. The overrun is concentrated in
+defect work rather than build work, which is worth saying plainly in the
+REFLEXION rather than presenting the total as a planning failure.
 
 ---
 
@@ -173,9 +266,17 @@ noise is fine for proving wiring and dishonest in a screenshot.
 - [ ] Map shows at least one zone hull drawn as a polygon
 - [ ] Depth rail shows ticks at correct heights and the water fill rises
 - [ ] Advisory card appears and clicking it flies the map to that zone
-- [ ] Status bar shows a non-zero cache hit rate
+- [ ] Status bar shows a non-zero cache hit rate. This was unsatisfiable as
+      written until E-019 was fixed: the counter lived in the correlator and the
+      API served its own always-empty copy. It now needs the correlator to have
+      flushed at least once, so allow a poll interval after startup before
+      capturing rather than shooting a legitimate `n/a`.
 - [ ] **Degradation proven:** stop ElastiCache, reload, confirm the console
       still works with the cache pip amber. Screenshot both states.
+- [ ] `/api/health` reports every worker live, and reports `degraded` when one
+      is stopped. Added because the endpoint returned `ok` with all three graded
+      components dead until E-023, so the original screenshot would have proven
+      nothing.
 - [ ] Prior gates still hold
 
 **Estimate:** 2 to 3 hours, assuming the frontend was already exercised against
